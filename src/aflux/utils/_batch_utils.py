@@ -33,9 +33,7 @@ def iter_batch[T](
 
     for i, kwargs in enumerate(kwargs_list):
         while len(pending) >= batch_size:
-            done, pending = concurrent.futures.wait(
-                pending, return_when=concurrent.futures.FIRST_COMPLETED
-            )
+            done, pending = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
             for future in done:
                 yield future.result()
 
@@ -82,9 +80,7 @@ async def aiter_batch[T](
 
     for i, kwargs in enumerate(kwargs_list):
         while len(pending) >= batch_size:
-            done, pending = await asyncio.wait(
-                pending, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
                 yield task.result()
 
