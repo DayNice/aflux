@@ -13,6 +13,7 @@ from ._video_utils import (
     decode_video_frames,
     decode_video_frames_into_numpy,
     get_video_frame_infos,
+    get_video_keyframe_infos,
     get_video_stream_info,
     remux_video_into_mp4,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "decode_video_frames_into_numpy",
     "get_video_frame_infos",
     "get_video_info",
+    "get_video_keyframe_infos",
     "get_video_stream_info",
     "iter_batch",
     "remux_video_into_mp4",

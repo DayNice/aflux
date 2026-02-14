@@ -73,6 +73,52 @@ def get_video_frame_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo
     return frame_infos
 
 
+def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo]:
+    keyframe_infos: list[VideoFrameInfo] = []
+    prev_keyframe_pts: int = -1
+
+    with av.open(video_file, "r") as container:
+        try:
+            stream = container.streams.video[0]
+        except IndexError:
+            msg = f"File should contain at least one video stream: {video_file}"
+            raise ValueError(msg)
+
+        assert stream.time_base is not None, f"Failed to determine video time base: {video_file}"
+
+        while True:
+            try:
+                container.seek(prev_keyframe_pts + 1, backward=False, stream=stream)
+            except av.error.PermissionError as e:
+                if e.args != (1, "Operation not permitted"):
+                    raise
+                # FFmpeg exception for trying to access beyond last frame
+                break
+
+            found_packet: av.Packet | None = None
+            for packet in container.demux(stream):
+                if packet.is_keyframe:
+                    found_packet = packet
+                    break
+            if found_packet is None:
+                break
+
+            assert found_packet.is_keyframe, "Packet should belong to a keyframe."
+            assert found_packet.pts is not None, "Keyframe should have a pts."
+            assert found_packet.pts > prev_keyframe_pts, "Forward seek should find next keyframe."
+
+            keyframe_info = VideoFrameInfo(
+                timestamp=float(found_packet.pts * stream.time_base),
+                dts=found_packet.dts if found_packet.dts is not None else found_packet.pts,
+                pts=found_packet.pts,
+                is_keyframe=found_packet.is_keyframe,
+            )
+            keyframe_infos.append(keyframe_info)
+            prev_keyframe_pts = keyframe_info.pts
+
+    return keyframe_infos
+
+
 def decode_video_frames(
     video_file: str | pathlib.Path,
     frame_indices: Iterable[int],
