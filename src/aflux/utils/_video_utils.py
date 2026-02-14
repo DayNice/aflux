@@ -160,17 +160,16 @@ def decode_video_frames_into_numpy(
         shape = (0, video_stream_info.num_channels, video_stream_info.height, video_stream_info.width)
         return np.empty(shape, dtype=np.float32)
 
-    arr_list: list[npt.NDArray[np.float32]] = []
+    arr_list: list[npt.NDArray[np.uint8]] = []
     video_reformatter = av.video.reformatter.VideoReformatter()
     for frame in frames:
         frame = video_reformatter.reformat(frame, format="rgb24")
         arr = frame.to_ndarray()
         assert len(arr.shape) == 3
         arr = arr.transpose(2, 0, 1)
-        arr = arr.astype(np.float32) / 255.0
         arr_list.append(arr)
 
-    return np.stack(arr_list)
+    return np.stack(arr_list).astype(np.float32) / 255.0
 
 
 def compute_video_statistics(video_file: str | pathlib.Path) -> VideoStatistics:
@@ -185,8 +184,8 @@ def compute_video_statistics(video_file: str | pathlib.Path) -> VideoStatistics:
         sample_size=frames.shape[0],
         min=tuple(frames.min(axis).tolist()),
         max=tuple(frames.max(axis).tolist()),
-        mean=tuple(frames.mean(axis).tolist()),
-        std=tuple(frames.std(axis).tolist()),
+        mean=tuple(frames.mean(axis, dtype=np.float64).tolist()),
+        std=tuple(frames.std(axis, dtype=np.float64).tolist()),
     )
     return statistics
 
