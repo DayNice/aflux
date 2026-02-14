@@ -164,7 +164,7 @@ def decode_video_frames_into_numpy(
     video_reformatter = av.video.reformatter.VideoReformatter()
     for frame in frames:
         frame = video_reformatter.reformat(frame, format="rgb24")
-        arr = frame.to_ndarray()
+        arr = cast(npt.NDArray[np.uint8], frame.to_ndarray())
         assert len(arr.shape) == 3
         arr = arr.transpose(2, 0, 1)
         arr_list.append(arr)
