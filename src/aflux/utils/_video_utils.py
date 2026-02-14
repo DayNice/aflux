@@ -78,69 +78,76 @@ def decode_video_frames(
     frame_indices: Iterable[int],
 ) -> list[av.VideoFrame]:
     frame_indices = list(frame_indices)
-    if not frame_indices:
+    if len(frame_indices) == 0:
         return []
+
+    frame_index_to_original_pos = {frame_index: pos for pos, frame_index in enumerate(frame_indices)}
+    frame_indices.sort()
 
     video_stream_info = get_video_stream_info(video_file)
     video_frame_infos = get_video_frame_infos(video_file)
+    assert video_stream_info.num_frames == len(video_frame_infos)
 
-    target_timestamps = [video_frame_infos[i].timestamp for i in frame_indices]
-    from_timestamp = min(target_timestamps)
-    to_timestamp = max(target_timestamps)
-    tolerance = 0.5 / video_stream_info.fps
+    if frame_indices[0] < 0:
+        msg = f"Frame index should be non-negative: {frame_indices[0]}"
+        raise ValueError(msg)
+    if frame_indices[-1] >= video_stream_info.num_frames:
+        msg = f"Frame index should be less than size: {frame_indices[-1]}"
+        raise ValueError(msg)
 
-    selected_frames: list[av.VideoFrame | None] = [None for _ in range(len(target_timestamps))]
-    min_distances: list[float] = [float("inf") for _ in range(len(target_timestamps))]
-    closest_timestamps: list[float | None] = [None for _ in range(len(target_timestamps))]
+    keyframe_indices: list[int] = []
+    keyframe_indices.append(0)  # frame at index 0 is an implicit keyframe
+    for i in range(1, len(video_frame_infos)):
+        if not video_frame_infos[i].is_keyframe:
+            continue
+        keyframe_indices.append(i)
+
+    keyframe_pts_map: dict[int, list[int]] = {}
+    for frame_index in frame_indices:
+        # locate keyframe at or before current frame
+        pos = np.searchsorted(keyframe_indices, frame_index, side="right") - 1
+        keyframe_index = keyframe_indices[pos]
+        keyframe_pts = video_frame_infos[keyframe_index].pts
+
+        if keyframe_pts not in keyframe_pts_map:
+            keyframe_pts_map[keyframe_pts] = []
+        keyframe_pts_map[keyframe_pts].append(frame_index)
+
+    found_frame_map: dict[int, av.VideoFrame] = {}
     with av.open(video_file, "r") as container:
         try:
             stream = container.streams.video[0]
         except IndexError:
             msg = f"File should contain at least one video stream: {video_file}"
             raise ValueError(msg)
-        assert stream.time_base is not None
         stream.thread_type = "AUTO"
 
-        # seek keyframe before first timestamp.
-        offset = int(round(from_timestamp / stream.time_base))
-        container.seek(offset, stream=stream)
+        for keyframe_pts, target_indices in sorted(keyframe_pts_map.items()):
+            target_pts_map = {video_frame_infos[i].pts: i for i in target_indices}
+            assert len(target_pts_map) == len(target_indices), "All pts values within video should be unique."
+            max_target_pts = max(target_pts_map.keys())
 
-        # Decode frames in the window
-        for frame in container.decode(stream):
-            assert frame.pts is not None
-            timestamp = float(frame.pts * stream.time_base)
+            container.seek(keyframe_pts, stream=stream)
+            for frame in container.decode(stream):
+                assert frame.pts is not None
+                assert frame.pts <= max_target_pts, "Target pts should exist in video."
 
-            if timestamp < from_timestamp - tolerance:
-                continue
-            if timestamp > to_timestamp + tolerance:
-                break
+                if frame.pts in target_pts_map:
+                    target_index = target_pts_map.pop(frame.pts)
+                    found_frame_map[target_index] = frame
+                if len(target_pts_map) == 0:
+                    break
 
-            for i, target_timestamp in enumerate(target_timestamps):
-                distance = abs(timestamp - target_timestamp)
-                if distance >= min_distances[i]:
-                    continue
-                min_distances[i] = distance
-                selected_frames[i] = frame
-                closest_timestamps[i] = timestamp
+            assert len(target_pts_map) == 0, "Target pts should exist in video."
 
-    min_dist = np.array(min_distances)
-    if not np.all(min_dist <= tolerance):
-        bad_indices = np.where(min_dist > tolerance)[0]
-        original_frame_indices = [frame_indices[i] for i in bad_indices]
-        queried_ts = [target_timestamps[i] for i in bad_indices]
-        closest_ts = [closest_timestamps[i] for i in bad_indices]
+    found_frames: list[av.VideoFrame | None] = [None for _ in range(len(frame_indices))]
+    for frame_index, frame in found_frame_map.items():
+        pos = frame_index_to_original_pos[frame_index]
+        found_frames[pos] = frame
 
-        msg = (
-            f"Could not find a close enough frame for all indices (tolerance: {tolerance:.4f}s).\n"
-            f"Problematic indices: {original_frame_indices}\n"
-            f"Their timestamps: {queried_ts}\n"
-            f"Closest found timestamps: {closest_ts}"
-        )
-        raise ValueError(msg)
-
-    for frame in selected_frames:
+    for frame in found_frames:
         assert frame is not None
-    return cast(list[av.VideoFrame], selected_frames)
+    return cast(list[av.VideoFrame], found_frames)
 
 
 def decode_video_frames_into_numpy(
