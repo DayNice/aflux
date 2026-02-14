@@ -176,16 +176,24 @@ def compute_video_statistics(video_file: str | pathlib.Path) -> VideoStatistics:
     video_stream_info = get_video_stream_info(video_file)
     indices = _stats_utils.compute_sample_indices(video_stream_info.num_frames)
 
-    frames = decode_video_frames_into_numpy(video_file, indices)
-    assert len(frames.shape) == 4  # (N, C, H, W)
+    frames = decode_video_frames(video_file, indices)
 
-    axis = (0, 2, 3)
+    arr_list: list[npt.NDArray[np.uint8]] = []
+    reformatter = av.video.reformatter.VideoReformatter()
+    for frame in frames:
+        arr = reformatter.reformat(frame, format="rgb24").to_ndarray()
+        assert arr.dtype == np.uint8 and len(arr.shape) == 3 and arr.shape[-1] == 3
+        arr = cast(npt.NDArray[np.uint8], arr)  # (H, W, 3)
+        arr_list.append(arr)
+    arr = cast(npt.NDArray[np.uint8], np.stack(arr_list))  # (N, H, W, 3)
+
+    axis = (0, 1, 2)
     statistics = VideoStatistics(
-        sample_size=frames.shape[0],
-        min=tuple(frames.min(axis).tolist()),
-        max=tuple(frames.max(axis).tolist()),
-        mean=tuple(frames.mean(axis, dtype=np.float64).tolist()),
-        std=tuple(frames.std(axis, dtype=np.float64).tolist()),
+        sample_size=arr.shape[0],
+        min=tuple((arr.min(axis) / 255.0).tolist()),
+        max=tuple((arr.max(axis) / 255.0).tolist()),
+        mean=tuple((arr.mean(axis, dtype=np.float64) / 255.0).tolist()),
+        std=tuple((arr.std(axis, dtype=np.float64) / 255.0).tolist()),
     )
     return statistics
 
