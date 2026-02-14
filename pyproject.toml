@@ -16,6 +16,7 @@ build-backend = "uv_build"
 dev = [
     "ipywidgets>=8.1.8",
     "notebook>=7.5.3",
+    "pillow>=12.1.1",
     "tqdm>=4.67.3",
 ]
 
