@@ -74,6 +74,39 @@ def get_video_frame_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo
     return frame_infos
 
 
+def get_video_last_frame_info(video_file: str | pathlib.Path) -> VideoFrameInfo:
+    last_keyframe_info = get_video_last_keyframe_info(video_file)
+
+    with av.open(video_file) as container:
+        try:
+            stream = container.streams.video[0]
+        except IndexError:
+            msg = f"File should contain at least one video stream: {video_file}"
+            raise ValueError(msg)
+
+        assert stream.time_base is not None, f"Failed to determine video time base: {video_file}"
+
+        container.seek(last_keyframe_info.pts, stream=stream)
+
+        found_packet: av.Packet | None = None
+        for packet in container.demux(stream):
+            if packet.pts is None:
+                continue
+            if found_packet is None or found_packet.pts < packet.pts:
+                found_packet = packet
+        assert found_packet is not None
+        assert found_packet.pts is not None
+
+        frame_info = VideoFrameInfo(
+            timestamp=found_packet.pts * stream.time_base,
+            dts=found_packet.dts if found_packet.dts is not None else found_packet.pts,
+            pts=found_packet.pts,
+            is_keyframe=found_packet.is_keyframe,
+        )
+
+    return frame_info
+
+
 def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo]:
     keyframe_infos: list[VideoFrameInfo] = []
     prev_keyframe_pts: int = -1
