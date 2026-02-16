@@ -1,4 +1,5 @@
 import fractions
+import functools
 import math
 import pathlib
 from collections.abc import Iterable, Iterator
@@ -20,21 +21,57 @@ from . import _stats_utils
 class VideoReader:
     def __init__(self, video_file: str | pathlib.Path) -> None:
         self.file = pathlib.Path(video_file)
-        self._container = av.open(video_file)
-
+        self._container = av.open(self.file)
         if len(self._container.streams.video) == 0:
             msg = f"File should contain at least one video stream: {video_file}"
             raise ValueError(msg)
-
         self._stream = self._container.streams.video[0]
-        self._stream_info = self._get_stream_info()
 
-    def _get_stream_info(self) -> VideoStreamInfo:
+    def _seek_pts(self, pts: int, *, backward: bool = True) -> bool:
+        try:
+            self._container.seek(pts, backward=backward, stream=self._stream)
+            return True
+        except av.error.PermissionError as e:
+            if e.args != (1, "Operation not permitted"):
+                raise
+            # FFmpeg exception for trying to seek beyond last keyframe
+            return False
+
+    def _demux_packets(self) -> Iterator[av.Packet]:
+        return self._container.demux(self._stream)
+
+    @functools.cached_property
+    def _first_keyframe_pts(self) -> int:
+        self._seek_pts(0)
+        packet = next(self._demux_packets())
+        assert isinstance(packet, av.Packet)
+        assert packet.is_keyframe, "Packet should belong to a keyframe."
+        assert packet.pts is not None, "Keyframe should have a pts."
+        return packet.pts
+
+    @functools.cached_property
+    def _last_keyframe_pts(self) -> int:
+        # compute initial search boundary
+        high_pts = 1
+        while self._seek_pts(high_pts, backward=False):
+            high_pts = high_pts * 2
+        low_pts = high_pts // 2
+
+        # binary search for last keyframe
+        while (high_pts - low_pts) > 1:
+            mid_pts = low_pts + (high_pts - low_pts) // 2
+            if self._seek_pts(mid_pts, backward=False):
+                low_pts = mid_pts
+            else:
+                high_pts = mid_pts
+        return low_pts
+
+    @functools.cached_property
+    def _stream_info(self) -> VideoStreamInfo:
         # stream attributes available in read mode
         assert self._stream.average_rate is not None
         assert self._stream.time_base is not None
         assert self._stream.pix_fmt is not None
-        assert self._stream.start_time is not None
 
         num_channels = len(self._stream.format.components)
         codec = self._stream.codec.canonical_name
@@ -57,11 +94,9 @@ class VideoReader:
 
     def _get_num_frames(self) -> int:
         # we assume the first frame is a keyframe
-        min_pts = self._get_first_keyframe_pts()
-
+        min_pts = self._first_keyframe_pts
         max_pts = 0
-        last_keyframe_pts = self._get_last_keyframe_pts()
-        assert self._seek_pts(last_keyframe_pts)
+        assert self._seek_pts(self._last_keyframe_pts)
         for packet in self._demux_packets():
             if packet.pts is None:
                 continue
@@ -72,30 +107,6 @@ class VideoReader:
         frames_per_time_base = self._stream.time_base * self._stream.average_rate
 
         return math.ceil((max_pts - min_pts) * frames_per_time_base) + 1
-
-    def _get_first_keyframe_pts(self) -> int:
-        self._seek_pts(0)
-        packet = next(self._demux_packets())
-        assert isinstance(packet, av.Packet)
-        assert packet.is_keyframe, "Packet should belong to a keyframe."
-        assert packet.pts is not None, "Keyframe should have a pts."
-        return packet.pts
-
-    def _get_last_keyframe_pts(self) -> int:
-        # compute initial search boundary
-        high_pts = 1
-        while self._seek_pts(high_pts, backward=False):
-            high_pts = high_pts * 2
-        low_pts = high_pts // 2
-
-        # binary search for last keyframe
-        while (high_pts - low_pts) > 1:
-            mid_pts = low_pts + (high_pts - low_pts) // 2
-            if self._seek_pts(mid_pts, backward=False):
-                low_pts = mid_pts
-            else:
-                high_pts = mid_pts
-        return low_pts
 
     def get_stream_info(self) -> VideoStreamInfo:
         return self._stream_info
@@ -116,8 +127,7 @@ class VideoReader:
     def get_last_frame_info(self) -> VideoFrameInfo:
         found_frame_info: VideoFrameInfo | None = None
 
-        last_keyframe_pts = self._get_last_keyframe_pts()
-        assert self._seek_pts(last_keyframe_pts)
+        assert self._seek_pts(self._last_keyframe_pts)
         for frame_info in self._demux_frame_infos():
             if found_frame_info is None or found_frame_info.pts < frame_info.pts:
                 found_frame_info = frame_info
@@ -148,26 +158,12 @@ class VideoReader:
         return frame_info
 
     def get_last_keyframe_info(self) -> VideoFrameInfo:
-        last_keyframe_pts = self._get_last_keyframe_pts()
-        assert self._seek_pts(last_keyframe_pts, backward=False)
+        assert self._seek_pts(self._last_keyframe_pts, backward=False)
         frame_info = next(self._demux_frame_infos())
 
         assert isinstance(frame_info, VideoFrameInfo)
         assert frame_info.is_keyframe, "Packet should belong to a keyframe."
         return frame_info
-
-    def _seek_pts(self, pts: int, *, backward: bool = True) -> bool:
-        try:
-            self._container.seek(pts, backward=backward, stream=self._stream)
-            return True
-        except av.error.PermissionError as e:
-            if e.args != (1, "Operation not permitted"):
-                raise
-            # FFmpeg exception for trying to seek beyond last keyframe
-            return False
-
-    def _demux_packets(self) -> Iterator[av.Packet]:
-        return self._container.demux(self._stream)
 
     def _demux_frame_infos(self) -> Iterator[VideoFrameInfo]:
         for packet in self._demux_packets():
