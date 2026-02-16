@@ -25,7 +25,7 @@ def get_video_stream_info(video_file: str | pathlib.Path) -> VideoStreamInfo:
         assert stream.time_base is not None, f"Failed to determine video time base: {video_file}"
         assert stream.pix_fmt is not None, f"Failed to determine video pixel format: {video_file}"
 
-        fps = round(float(stream.average_rate), 3)  # tolerate fractions introduced while remuxing
+        fps = stream.average_rate
         time_base = stream.time_base
         height = stream.height
         width = stream.width

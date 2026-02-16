@@ -1,10 +1,10 @@
 from fractions import Fraction
 
-from pydantic import BaseModel, NonNegativeFloat, NonNegativeInt, PositiveFloat, PositiveInt
+from pydantic import BaseModel, NonNegativeFloat, NonNegativeInt, PositiveInt
 
 
 class VideoStreamInfo(BaseModel):
-    fps: PositiveFloat
+    fps: Fraction
     time_base: Fraction
     height: PositiveInt
     width: PositiveInt
