@@ -72,6 +72,13 @@ class VideoReader:
         frame_infos.sort(key=lambda el: el.timestamp)
         return frame_infos
 
+    def get_first_frame_info(self) -> VideoFrameInfo:
+        # we assume the first frame is a keyframe
+        frame_info = self.get_first_keyframe_info()
+        assert self._stream.start_time is not None, "Failed to determine start time."
+        assert frame_info.pts == self._stream.start_time
+        return frame_info
+
     def get_last_frame_info(self) -> VideoFrameInfo:
         last_keyframe_info = self.get_last_keyframe_info()
 
@@ -120,6 +127,21 @@ class VideoReader:
             prev_keyframe_pts = keyframe_info.pts
 
         return keyframe_infos
+
+    def get_first_keyframe_info(self) -> VideoFrameInfo:
+        assert self._seek_pts(0, backward=False)
+        packet = next(self._demux_packets())
+        assert isinstance(packet, av.Packet)
+        assert packet.is_keyframe, "Packet should belong to a keyframe."
+        assert packet.pts is not None, "Keyframe should have a pts."
+
+        frame_info = VideoFrameInfo(
+            timestamp=packet.pts * self._stream_info.time_base,
+            dts=packet.dts if packet.dts is not None else packet.pts,
+            pts=packet.pts,
+            is_keyframe=packet.is_keyframe,
+        )
+        return frame_info
 
     def get_last_keyframe_info(self) -> VideoFrameInfo:
         # compute initial search boundary
