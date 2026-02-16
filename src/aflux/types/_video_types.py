@@ -1,6 +1,6 @@
 from fractions import Fraction
 
-from pydantic import BaseModel, NonNegativeFloat, NonNegativeInt, PositiveInt
+from pydantic import BaseModel, NonNegativeInt, PositiveInt
 
 
 class VideoStreamInfo(BaseModel):
@@ -15,7 +15,7 @@ class VideoStreamInfo(BaseModel):
 
 
 class VideoFrameInfo(BaseModel):
-    timestamp: NonNegativeFloat
+    timestamp: Fraction
     dts: int
     pts: NonNegativeInt
     is_keyframe: bool

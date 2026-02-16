@@ -63,7 +63,7 @@ def get_video_frame_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo
             if packet.pts is None:
                 continue
             frame_info = VideoFrameInfo(
-                timestamp=float(packet.pts * stream.time_base),
+                timestamp=packet.pts * stream.time_base,
                 dts=packet.dts if packet.dts is not None else packet.pts,
                 pts=packet.pts,
                 is_keyframe=packet.is_keyframe,
@@ -109,7 +109,7 @@ def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameI
             assert found_packet.pts > prev_keyframe_pts, "Forward seek should find next keyframe."
 
             keyframe_info = VideoFrameInfo(
-                timestamp=float(found_packet.pts * stream.time_base),
+                timestamp=found_packet.pts * stream.time_base,
                 dts=found_packet.dts if found_packet.dts is not None else found_packet.pts,
                 pts=found_packet.pts,
                 is_keyframe=found_packet.is_keyframe,
@@ -167,7 +167,7 @@ def get_video_last_keyframe_info(video_file: str | pathlib.Path) -> VideoFrameIn
         assert packet.pts is not None, "Keyframe should have a pts."
 
         frame_info = VideoFrameInfo(
-            timestamp=float(packet.pts * stream.time_base),
+            timestamp=packet.pts * stream.time_base,
             dts=packet.dts if packet.dts is not None else packet.pts,
             pts=packet.pts,
             is_keyframe=packet.is_keyframe,
