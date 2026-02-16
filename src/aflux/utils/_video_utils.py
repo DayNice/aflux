@@ -3,6 +3,7 @@ import functools
 import math
 import pathlib
 from collections.abc import Iterable, Iterator
+from fractions import Fraction
 from types import TracebackType
 from typing import Self, cast
 
@@ -67,6 +68,12 @@ class VideoReader:
         return low_pts
 
     @functools.cached_property
+    def _frames_per_time_base(self) -> Fraction:
+        assert self._stream.time_base is not None
+        assert self._stream.average_rate is not None
+        return self._stream.time_base * self._stream.average_rate
+
+    @functools.cached_property
     def _stream_info(self) -> VideoStreamInfo:
         # stream attributes available in read mode
         assert self._stream.average_rate is not None
@@ -101,12 +108,19 @@ class VideoReader:
             if packet.pts is None:
                 continue
             max_pts = max(max_pts, packet.pts)
+        return math.ceil((max_pts - min_pts) * self._frames_per_time_base) + 1
 
-        assert self._stream.time_base is not None
-        assert self._stream.average_rate is not None
-        frames_per_time_base = self._stream.time_base * self._stream.average_rate
+    def _estimate_frame_pts_by_index(self, frame_index: int) -> int:
+        if frame_index < 0:
+            msg = f"Frame index should be non-negative: {frame_index}"
+            raise ValueError(msg)
+        if frame_index >= self._stream_info.num_frames:
+            msg = f"Frame index should be less than size: {frame_index}"
+            raise ValueError(msg)
 
-        return math.ceil((max_pts - min_pts) * frames_per_time_base) + 1
+        # we assume the first frame is a keyframe
+        first_frame_pts = self._first_keyframe_pts
+        return first_frame_pts + math.ceil(frame_index / self._frames_per_time_base)
 
     def get_stream_info(self) -> VideoStreamInfo:
         return self._stream_info
