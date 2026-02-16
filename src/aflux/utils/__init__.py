@@ -9,6 +9,7 @@ from ._stats_utils import (
     compute_sample_size,
 )
 from ._video_utils import (
+    VideoReader,
     compute_video_statistics,
     decode_video_frames,
     decode_video_frames_into_numpy,
@@ -21,6 +22,7 @@ from ._video_utils import (
 )
 
 __all__ = [
+    "VideoReader",
     "aiter_batch",
     "arun_batch",
     "compute_sample_indices",

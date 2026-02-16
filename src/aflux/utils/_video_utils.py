@@ -1,6 +1,8 @@
 import fractions
 import pathlib
-from typing import Iterable, cast
+from collections.abc import Iterable, Iterator
+from types import TracebackType
+from typing import Self, cast
 
 import av
 import av.container
@@ -14,82 +16,68 @@ from aflux.types import VideoFrameInfo, VideoStatistics, VideoStreamInfo
 from . import _stats_utils
 
 
-def get_video_stream_info(video_file: str | pathlib.Path) -> VideoStreamInfo:
-    with av.open(video_file) as container:
-        try:
-            stream = container.streams.video[0]
-        except IndexError:
+class VideoReader:
+    def __init__(self, video_file: str | pathlib.Path) -> None:
+        self.file = pathlib.Path(video_file)
+        self._container = av.open(video_file)
+
+        if len(self._container.streams.video) == 0:
             msg = f"File should contain at least one video stream: {video_file}"
             raise ValueError(msg)
 
-        assert stream.average_rate is not None, f"Failed to determine video average rate: {video_file}"
-        assert stream.time_base is not None, f"Failed to determine video time base: {video_file}"
-        assert stream.pix_fmt is not None, f"Failed to determine video pixel format: {video_file}"
+        self._stream = self._container.streams.video[0]
+        self._stream_info = self.get_stream_info()
 
-        fps = stream.average_rate
-        time_base = stream.time_base
-        height = stream.height
-        width = stream.width
-        num_channels = len(stream.format.components)
-        codec = stream.codec.canonical_name
-        pixel_format = stream.pix_fmt
-        num_frames = stream.frames
+    def get_stream_info(self) -> VideoStreamInfo:
+        if hasattr(self, "_stream_info"):
+            return self._stream_info
 
-    video_stream_info = VideoStreamInfo(
-        fps=fps,
-        time_base=time_base,
-        height=height,
-        width=width,
-        num_channels=num_channels,
-        codec=codec,
-        pixel_format=pixel_format,
-        num_frames=num_frames,
-    )
-    return video_stream_info
+        # stream attributes available in read mode
+        assert self._stream.average_rate is not None
+        assert self._stream.time_base is not None
+        assert self._stream.pix_fmt is not None
 
+        num_channels = len(self._stream.format.components)
+        codec = self._stream.codec.canonical_name
+        num_frames = self._stream.frames
 
-def get_video_frame_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo]:
-    with av.open(video_file) as container:
-        try:
-            stream = container.streams.video[0]
-        except IndexError:
-            msg = f"File should contain at least one video stream: {video_file}"
-            raise ValueError(msg)
+        video_stream_info = VideoStreamInfo(
+            fps=self._stream.average_rate,
+            time_base=self._stream.time_base,
+            height=self._stream.height,
+            width=self._stream.width,
+            num_channels=num_channels,
+            codec=codec,
+            pixel_format=self._stream.pix_fmt,
+            num_frames=num_frames,
+        )
+        return video_stream_info
 
-        assert stream.time_base is not None, f"Failed to determine video time base: {video_file}"
-
+    def get_frame_infos(self) -> list[VideoFrameInfo]:
         frame_infos: list[VideoFrameInfo] = []
-        for packet in container.demux(stream):
+
+        assert self._seek_pts(0)
+        for packet in self._demux_packets():
             if packet.pts is None:
                 continue
+
             frame_info = VideoFrameInfo(
-                timestamp=packet.pts * stream.time_base,
+                timestamp=packet.pts * self._stream_info.time_base,
                 dts=packet.dts if packet.dts is not None else packet.pts,
                 pts=packet.pts,
                 is_keyframe=packet.is_keyframe,
             )
             frame_infos.append(frame_info)
+
         frame_infos.sort(key=lambda el: el.timestamp)
+        return frame_infos
 
-    return frame_infos
-
-
-def get_video_last_frame_info(video_file: str | pathlib.Path) -> VideoFrameInfo:
-    last_keyframe_info = get_video_last_keyframe_info(video_file)
-
-    with av.open(video_file) as container:
-        try:
-            stream = container.streams.video[0]
-        except IndexError:
-            msg = f"File should contain at least one video stream: {video_file}"
-            raise ValueError(msg)
-
-        assert stream.time_base is not None, f"Failed to determine video time base: {video_file}"
-
-        container.seek(last_keyframe_info.pts, stream=stream)
+    def get_last_frame_info(self) -> VideoFrameInfo:
+        last_keyframe_info = self.get_last_keyframe_info()
 
         found_packet: av.Packet | None = None
-        for packet in container.demux(stream):
+        assert self._seek_pts(last_keyframe_info.pts)
+        for packet in self._demux_packets():
             if packet.pts is None:
                 continue
             if found_packet is None or found_packet.pts < packet.pts:
@@ -98,39 +86,20 @@ def get_video_last_frame_info(video_file: str | pathlib.Path) -> VideoFrameInfo:
         assert found_packet.pts is not None
 
         frame_info = VideoFrameInfo(
-            timestamp=found_packet.pts * stream.time_base,
+            timestamp=found_packet.pts * self._stream_info.time_base,
             dts=found_packet.dts if found_packet.dts is not None else found_packet.pts,
             pts=found_packet.pts,
             is_keyframe=found_packet.is_keyframe,
         )
+        return frame_info
 
-    return frame_info
+    def get_keyframe_infos(self) -> list[VideoFrameInfo]:
+        keyframe_infos: list[VideoFrameInfo] = []
+        prev_keyframe_pts: int = -1
 
-
-def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo]:
-    keyframe_infos: list[VideoFrameInfo] = []
-    prev_keyframe_pts: int = -1
-
-    with av.open(video_file, "r") as container:
-        try:
-            stream = container.streams.video[0]
-        except IndexError:
-            msg = f"File should contain at least one video stream: {video_file}"
-            raise ValueError(msg)
-
-        assert stream.time_base is not None, f"Failed to determine video time base: {video_file}"
-
-        while True:
-            try:
-                container.seek(prev_keyframe_pts + 1, backward=False, stream=stream)
-            except av.error.PermissionError as e:
-                if e.args != (1, "Operation not permitted"):
-                    raise
-                # FFmpeg exception for trying to access beyond last frame
-                break
-
+        while self._seek_pts(prev_keyframe_pts + 1, backward=False):
             found_packet: av.Packet | None = None
-            for packet in container.demux(stream):
+            for packet in self._demux_packets():
                 if packet.is_keyframe:
                     found_packet = packet
                     break
@@ -142,7 +111,7 @@ def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameI
             assert found_packet.pts > prev_keyframe_pts, "Forward seek should find next keyframe."
 
             keyframe_info = VideoFrameInfo(
-                timestamp=found_packet.pts * stream.time_base,
+                timestamp=found_packet.pts * self._stream_info.time_base,
                 dts=found_packet.dts if found_packet.dts is not None else found_packet.pts,
                 pts=found_packet.pts,
                 is_keyframe=found_packet.is_keyframe,
@@ -150,63 +119,88 @@ def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameI
             keyframe_infos.append(keyframe_info)
             prev_keyframe_pts = keyframe_info.pts
 
-    return keyframe_infos
+        return keyframe_infos
 
-
-def get_video_last_keyframe_info(video_file: str | pathlib.Path) -> VideoFrameInfo:
-    with av.open(str(video_file), "r") as container:
-        try:
-            stream = container.streams.video[0]
-        except IndexError:
-            msg = f"File should contain at least one video stream: {video_file}"
-            raise ValueError(msg)
-
-        assert stream.time_base is not None, f"Failed to determine video time base: {video_file}"
-
-        def _try_container_seek_forward(
-            container: av.container.InputContainer,
-            offset: int,
-            stream: av.VideoStream,
-        ):
-            try:
-                container.seek(offset, backward=False, stream=stream)
-                return True
-            except av.error.PermissionError as e:
-                if e.args != (1, "Operation not permitted"):
-                    raise
-                # FFmpeg exception for trying to access beyond last frame
-                return False
-
+    def get_last_keyframe_info(self) -> VideoFrameInfo:
+        # compute initial search boundary
         high_pts = 1
-        while True:
-            success = _try_container_seek_forward(container, high_pts, stream)
-            if not success:
-                break
+        while self._seek_pts(high_pts, backward=False):
             high_pts = high_pts * 2
         low_pts = high_pts // 2
 
+        # binary search for last keyframe
         while (high_pts - low_pts) > 1:
             mid_pts = low_pts + (high_pts - low_pts) // 2
-            success = _try_container_seek_forward(container, mid_pts, stream)
-            if success:
+            if self._seek_pts(mid_pts, backward=False):
                 low_pts = mid_pts
             else:
                 high_pts = mid_pts
 
-        container.seek(low_pts, backward=False, stream=stream)
-        packet = next(container.demux(stream))
+        assert self._seek_pts(low_pts, backward=False)
+        packet = next(self._demux_packets())
         assert isinstance(packet, av.Packet)
         assert packet.is_keyframe, "Packet should belong to a keyframe."
         assert packet.pts is not None, "Keyframe should have a pts."
 
         frame_info = VideoFrameInfo(
-            timestamp=packet.pts * stream.time_base,
+            timestamp=packet.pts * self._stream_info.time_base,
             dts=packet.dts if packet.dts is not None else packet.pts,
             pts=packet.pts,
             is_keyframe=packet.is_keyframe,
         )
+        return frame_info
 
-    return frame_info
+    def _seek_pts(self, pts: int, *, backward: bool = True) -> bool:
+        try:
+            self._container.seek(pts, backward=backward, stream=self._stream)
+            return True
+        except av.error.PermissionError as e:
+            if e.args != (1, "Operation not permitted"):
+                raise
+            # FFmpeg exception for trying to seek beyond last keyframe
+            return False
+
+    def _demux_packets(self) -> Iterator[av.Packet]:
+        return self._container.demux(self._stream)
+
+    def close(self) -> None:
+        self._container.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
+
+def get_video_stream_info(video_file: str | pathlib.Path) -> VideoStreamInfo:
+    with VideoReader(video_file) as video_reader:
+        return video_reader.get_stream_info()
+
+
+def get_video_frame_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo]:
+    with VideoReader(video_file) as video_reader:
+        return video_reader.get_frame_infos()
+
+
+def get_video_last_frame_info(video_file: str | pathlib.Path) -> VideoFrameInfo:
+    with VideoReader(video_file) as video_reader:
+        return video_reader.get_last_frame_info()
+
+
+def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo]:
+    with VideoReader(video_file) as video_reader:
+        return video_reader.get_keyframe_infos()
+
+
+def get_video_last_keyframe_info(video_file: str | pathlib.Path) -> VideoFrameInfo:
+    with VideoReader(video_file) as video_reader:
+        return video_reader.get_last_keyframe_info()
 
 
 def decode_video_frames(
