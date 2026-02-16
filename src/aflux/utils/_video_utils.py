@@ -41,18 +41,7 @@ class VideoReader:
 
         num_frames = self._stream.frames
         if num_frames == 0:
-            last_keyframe_pts = self._get_last_keyframe_pts()
-
-            max_pts = 0
-            assert self._seek_pts(last_keyframe_pts)
-            for packet in self._demux_packets():
-                if packet.pts is None:
-                    continue
-                max_pts = max(max_pts, packet.pts)
-            min_pts = self._stream.start_time
-
-            frames_per_time_base = self._stream.time_base * self._stream.average_rate
-            num_frames = math.ceil((max_pts - min_pts) * frames_per_time_base) + 1
+            num_frames = self._get_num_frames()
 
         video_stream_info = VideoStreamInfo(
             fps=self._stream.average_rate,
@@ -65,6 +54,32 @@ class VideoReader:
             num_frames=num_frames,
         )
         return video_stream_info
+
+    def _get_num_frames(self) -> int:
+        # we assume the first frame is a keyframe
+        min_pts = self._get_first_keyframe_pts()
+
+        max_pts = 0
+        last_keyframe_pts = self._get_last_keyframe_pts()
+        assert self._seek_pts(last_keyframe_pts)
+        for packet in self._demux_packets():
+            if packet.pts is None:
+                continue
+            max_pts = max(max_pts, packet.pts)
+
+        assert self._stream.time_base is not None
+        assert self._stream.average_rate is not None
+        frames_per_time_base = self._stream.time_base * self._stream.average_rate
+
+        return math.ceil((max_pts - min_pts) * frames_per_time_base) + 1
+
+    def _get_first_keyframe_pts(self) -> int:
+        self._seek_pts(0)
+        packet = next(self._demux_packets())
+        assert isinstance(packet, av.Packet)
+        assert packet.is_keyframe, "Packet should belong to a keyframe."
+        assert packet.pts is not None, "Keyframe should have a pts."
+        return packet.pts
 
     def _get_last_keyframe_pts(self) -> int:
         # compute initial search boundary
