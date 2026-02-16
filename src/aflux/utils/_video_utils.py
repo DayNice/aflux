@@ -1,4 +1,5 @@
 import fractions
+import math
 import pathlib
 from collections.abc import Iterable, Iterator
 from types import TracebackType
@@ -26,20 +27,32 @@ class VideoReader:
             raise ValueError(msg)
 
         self._stream = self._container.streams.video[0]
-        self._stream_info = self.get_stream_info()
+        self._stream_info = self._get_stream_info()
 
-    def get_stream_info(self) -> VideoStreamInfo:
-        if hasattr(self, "_stream_info"):
-            return self._stream_info
-
+    def _get_stream_info(self) -> VideoStreamInfo:
         # stream attributes available in read mode
         assert self._stream.average_rate is not None
         assert self._stream.time_base is not None
         assert self._stream.pix_fmt is not None
+        assert self._stream.start_time is not None
 
         num_channels = len(self._stream.format.components)
         codec = self._stream.codec.canonical_name
+
         num_frames = self._stream.frames
+        if num_frames == 0:
+            last_keyframe_pts = self._get_last_keyframe_pts()
+
+            max_pts = 0
+            assert self._seek_pts(last_keyframe_pts)
+            for packet in self._demux_packets():
+                if packet.pts is None:
+                    continue
+                max_pts = max(max_pts, packet.pts)
+            min_pts = self._stream.start_time
+
+            frames_per_time_base = self._stream.time_base * self._stream.average_rate
+            num_frames = math.ceil((max_pts - min_pts) * frames_per_time_base) + 1
 
         video_stream_info = VideoStreamInfo(
             fps=self._stream.average_rate,
@@ -52,6 +65,25 @@ class VideoReader:
             num_frames=num_frames,
         )
         return video_stream_info
+
+    def _get_last_keyframe_pts(self) -> int:
+        # compute initial search boundary
+        high_pts = 1
+        while self._seek_pts(high_pts, backward=False):
+            high_pts = high_pts * 2
+        low_pts = high_pts // 2
+
+        # binary search for last keyframe
+        while (high_pts - low_pts) > 1:
+            mid_pts = low_pts + (high_pts - low_pts) // 2
+            if self._seek_pts(mid_pts, backward=False):
+                low_pts = mid_pts
+            else:
+                high_pts = mid_pts
+        return low_pts
+
+    def get_stream_info(self) -> VideoStreamInfo:
+        return self._stream_info
 
     def get_frame_infos(self) -> list[VideoFrameInfo]:
         frame_infos: list[VideoFrameInfo] = []
@@ -80,10 +112,10 @@ class VideoReader:
         return frame_info
 
     def get_last_frame_info(self) -> VideoFrameInfo:
-        last_keyframe_info = self.get_last_keyframe_info()
+        last_keyframe_pts = self._get_last_keyframe_pts()
 
         found_packet: av.Packet | None = None
-        assert self._seek_pts(last_keyframe_info.pts)
+        assert self._seek_pts(last_keyframe_pts)
         for packet in self._demux_packets():
             if packet.pts is None:
                 continue
@@ -144,21 +176,9 @@ class VideoReader:
         return frame_info
 
     def get_last_keyframe_info(self) -> VideoFrameInfo:
-        # compute initial search boundary
-        high_pts = 1
-        while self._seek_pts(high_pts, backward=False):
-            high_pts = high_pts * 2
-        low_pts = high_pts // 2
+        last_keyframe_pts = self._get_last_keyframe_pts()
 
-        # binary search for last keyframe
-        while (high_pts - low_pts) > 1:
-            mid_pts = low_pts + (high_pts - low_pts) // 2
-            if self._seek_pts(mid_pts, backward=False):
-                low_pts = mid_pts
-            else:
-                high_pts = mid_pts
-
-        assert self._seek_pts(low_pts, backward=False)
+        assert self._seek_pts(last_keyframe_pts, backward=False)
         packet = next(self._demux_packets())
         assert isinstance(packet, av.Packet)
         assert packet.is_keyframe, "Packet should belong to a keyframe."
