@@ -3,6 +3,7 @@ import pathlib
 from typing import Iterable, cast
 
 import av
+import av.container
 import av.stream
 import av.video.reformatter
 import numpy as np
@@ -117,6 +118,62 @@ def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameI
             prev_keyframe_pts = keyframe_info.pts
 
     return keyframe_infos
+
+
+def get_video_last_keyframe_info(video_file: str | pathlib.Path) -> VideoFrameInfo:
+    with av.open(str(video_file), "r") as container:
+        try:
+            stream = container.streams.video[0]
+        except IndexError:
+            msg = f"File should contain at least one video stream: {video_file}"
+            raise ValueError(msg)
+
+        assert stream.time_base is not None, f"Failed to determine video time base: {video_file}"
+
+        def _try_container_seek_forward(
+            container: av.container.InputContainer,
+            offset: int,
+            stream: av.VideoStream,
+        ):
+            try:
+                container.seek(offset, backward=False, stream=stream)
+                return True
+            except av.error.PermissionError as e:
+                if e.args != (1, "Operation not permitted"):
+                    raise
+                # FFmpeg exception for trying to access beyond last frame
+                return False
+
+        high_pts = 1
+        while True:
+            success = _try_container_seek_forward(container, high_pts, stream)
+            if not success:
+                break
+            high_pts = high_pts * 2
+        low_pts = high_pts // 2
+
+        while (high_pts - low_pts) > 1:
+            mid_pts = low_pts + (high_pts - low_pts) // 2
+            success = _try_container_seek_forward(container, mid_pts, stream)
+            if success:
+                low_pts = mid_pts
+            else:
+                high_pts = mid_pts
+
+        container.seek(low_pts, backward=False, stream=stream)
+        packet = next(container.demux(stream))
+        assert isinstance(packet, av.Packet)
+        assert packet.is_keyframe, "Packet should belong to a keyframe."
+        assert packet.pts is not None, "Keyframe should have a pts."
+
+        frame_info = VideoFrameInfo(
+            timestamp=float(packet.pts * stream.time_base),
+            dts=packet.dts if packet.dts is not None else packet.pts,
+            pts=packet.pts,
+            is_keyframe=packet.is_keyframe,
+        )
+
+    return frame_info
 
 
 def decode_video_frames(
