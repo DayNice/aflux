@@ -86,21 +86,8 @@ class VideoReader:
         return self._stream_info
 
     def get_frame_infos(self) -> list[VideoFrameInfo]:
-        frame_infos: list[VideoFrameInfo] = []
-
         assert self._seek_pts(0)
-        for packet in self._demux_packets():
-            if packet.pts is None:
-                continue
-
-            frame_info = VideoFrameInfo(
-                timestamp=packet.pts * self._stream_info.time_base,
-                dts=packet.dts if packet.dts is not None else packet.pts,
-                pts=packet.pts,
-                is_keyframe=packet.is_keyframe,
-            )
-            frame_infos.append(frame_info)
-
+        frame_infos = [el for el in self._demux_frame_infos()]
         frame_infos.sort(key=lambda el: el.timestamp)
         return frame_infos
 
@@ -112,49 +99,26 @@ class VideoReader:
         return frame_info
 
     def get_last_frame_info(self) -> VideoFrameInfo:
+        found_frame_info: VideoFrameInfo | None = None
+
         last_keyframe_pts = self._get_last_keyframe_pts()
-
-        found_packet: av.Packet | None = None
         assert self._seek_pts(last_keyframe_pts)
-        for packet in self._demux_packets():
-            if packet.pts is None:
-                continue
-            if found_packet is None or found_packet.pts < packet.pts:
-                found_packet = packet
-        assert found_packet is not None
-        assert found_packet.pts is not None
+        for frame_info in self._demux_frame_infos():
+            if found_frame_info is None or found_frame_info.pts < frame_info.pts:
+                found_frame_info = frame_info
 
-        frame_info = VideoFrameInfo(
-            timestamp=found_packet.pts * self._stream_info.time_base,
-            dts=found_packet.dts if found_packet.dts is not None else found_packet.pts,
-            pts=found_packet.pts,
-            is_keyframe=found_packet.is_keyframe,
-        )
-        return frame_info
+        assert found_frame_info is not None
+        return found_frame_info
 
     def get_keyframe_infos(self) -> list[VideoFrameInfo]:
         keyframe_infos: list[VideoFrameInfo] = []
         prev_keyframe_pts: int = -1
 
         while self._seek_pts(prev_keyframe_pts + 1, backward=False):
-            found_packet: av.Packet | None = None
-            for packet in self._demux_packets():
-                if packet.is_keyframe:
-                    found_packet = packet
-                    break
-            if found_packet is None:
-                break
+            keyframe_info = next(self._demux_frame_infos())
+            assert isinstance(keyframe_info, VideoFrameInfo)
+            assert keyframe_info.is_keyframe, "Packet should belong to a keyframe."
 
-            assert found_packet.is_keyframe, "Packet should belong to a keyframe."
-            assert found_packet.pts is not None, "Keyframe should have a pts."
-            assert found_packet.pts > prev_keyframe_pts, "Forward seek should find next keyframe."
-
-            keyframe_info = VideoFrameInfo(
-                timestamp=found_packet.pts * self._stream_info.time_base,
-                dts=found_packet.dts if found_packet.dts is not None else found_packet.pts,
-                pts=found_packet.pts,
-                is_keyframe=found_packet.is_keyframe,
-            )
             keyframe_infos.append(keyframe_info)
             prev_keyframe_pts = keyframe_info.pts
 
@@ -162,34 +126,19 @@ class VideoReader:
 
     def get_first_keyframe_info(self) -> VideoFrameInfo:
         assert self._seek_pts(0, backward=False)
-        packet = next(self._demux_packets())
-        assert isinstance(packet, av.Packet)
-        assert packet.is_keyframe, "Packet should belong to a keyframe."
-        assert packet.pts is not None, "Keyframe should have a pts."
+        frame_info = next(self._demux_frame_infos())
 
-        frame_info = VideoFrameInfo(
-            timestamp=packet.pts * self._stream_info.time_base,
-            dts=packet.dts if packet.dts is not None else packet.pts,
-            pts=packet.pts,
-            is_keyframe=packet.is_keyframe,
-        )
+        assert isinstance(frame_info, VideoFrameInfo)
+        assert frame_info.is_keyframe, "Packet should belong to a keyframe."
         return frame_info
 
     def get_last_keyframe_info(self) -> VideoFrameInfo:
         last_keyframe_pts = self._get_last_keyframe_pts()
-
         assert self._seek_pts(last_keyframe_pts, backward=False)
-        packet = next(self._demux_packets())
-        assert isinstance(packet, av.Packet)
-        assert packet.is_keyframe, "Packet should belong to a keyframe."
-        assert packet.pts is not None, "Keyframe should have a pts."
+        frame_info = next(self._demux_frame_infos())
 
-        frame_info = VideoFrameInfo(
-            timestamp=packet.pts * self._stream_info.time_base,
-            dts=packet.dts if packet.dts is not None else packet.pts,
-            pts=packet.pts,
-            is_keyframe=packet.is_keyframe,
-        )
+        assert isinstance(frame_info, VideoFrameInfo)
+        assert frame_info.is_keyframe, "Packet should belong to a keyframe."
         return frame_info
 
     def _seek_pts(self, pts: int, *, backward: bool = True) -> bool:
@@ -204,6 +153,18 @@ class VideoReader:
 
     def _demux_packets(self) -> Iterator[av.Packet]:
         return self._container.demux(self._stream)
+
+    def _demux_frame_infos(self) -> Iterator[VideoFrameInfo]:
+        for packet in self._demux_packets():
+            if packet.pts is None:
+                continue
+            frame_info = VideoFrameInfo(
+                timestamp=packet.pts * self._stream_info.time_base,
+                dts=packet.dts if packet.dts is not None else packet.pts,
+                pts=packet.pts,
+                is_keyframe=packet.is_keyframe,
+            )
+            yield frame_info
 
     def close(self) -> None:
         self._container.close()
