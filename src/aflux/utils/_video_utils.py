@@ -1,11 +1,13 @@
+import bisect
 import fractions
 import functools
 import math
+import operator
 import pathlib
 from collections.abc import Iterable, Iterator
 from fractions import Fraction
 from types import TracebackType
-from typing import Self, cast
+from typing import Self, TypedDict, cast
 
 import av
 import av.container
@@ -27,6 +29,7 @@ class VideoReader:
             msg = f"File should contain at least one video stream: {video_file}"
             raise ValueError(msg)
         self._stream = self._container.streams.video[0]
+        self._stream.thread_type = "AUTO"
 
     def _seek_pts(self, pts: int, *, backward: bool = True) -> bool:
         try:
@@ -40,6 +43,9 @@ class VideoReader:
 
     def _demux_packets(self) -> Iterator[av.Packet]:
         return self._container.demux(self._stream)
+
+    def _decode_frames(self) -> Iterator[av.VideoFrame]:
+        return self._container.decode(self._stream)
 
     @functools.cached_property
     def _first_keyframe_pts(self) -> int:
@@ -137,6 +143,16 @@ class VideoReader:
 
         return keyframe_infos
 
+    def _search_keyframe_info_by_pts(self, pts: int) -> VideoFrameInfo:
+        if pts < 0:
+            msg = "Target pts should be a non-negative integer."
+            raise ValueError(msg)
+        if pts <= self._keyframe_infos[0].pts:
+            return self._keyframe_infos[0]
+
+        pos = bisect.bisect_right(self._keyframe_infos, pts, key=operator.attrgetter("pts"))
+        return self._keyframe_infos[pos - 1]
+
     def _estimate_frame_pts_by_index(self, frame_index: int) -> int:
         if frame_index < 0:
             msg = f"Frame index should be non-negative: {frame_index}"
@@ -197,6 +213,61 @@ class VideoReader:
         assert frame_info.is_keyframe, "Packet should belong to a keyframe."
         return frame_info
 
+    def decode_frames_by_indices(self, frame_indices: Iterable[int]) -> list[av.VideoFrame]:
+        frame_indices = list(frame_indices)
+        if len(frame_indices) == 0:
+            return []
+        frame_index_to_original_pos = {frame_index: pos for pos, frame_index in enumerate(frame_indices)}
+        frame_indices.sort()
+
+        if frame_indices[0] < 0:
+            msg = f"Frame index should be non-negative: {frame_indices[0]}"
+            raise ValueError(msg)
+        if frame_indices[-1] >= self._stream_info.num_frames:
+            msg = f"Frame index should be less than size: {frame_indices[-1]}"
+            raise ValueError(msg)
+
+        class _FrameData(TypedDict):
+            frame_index: int
+            frame_info: VideoFrameInfo
+
+        keyframe_map: dict[VideoFrameInfo, list[_FrameData]] = {}
+        for frame_index in frame_indices:
+            frame_info = self.get_frame_info_by_index(frame_index)
+            frame_data: _FrameData = {"frame_index": frame_index, "frame_info": frame_info}
+            keyframe_info = self._search_keyframe_info_by_pts(frame_info.pts)
+
+            if keyframe_info not in keyframe_map:
+                keyframe_map[keyframe_info] = []
+            keyframe_map[keyframe_info].append(frame_data)
+
+        found_frame_map: dict[int, av.VideoFrame] = {}
+        for keyframe_info, frame_data_list in sorted(keyframe_map.items(), key=lambda el: el[0].pts):
+            frame_pts_map = {el["frame_info"].pts: el["frame_index"] for el in frame_data_list}
+            assert len(frame_pts_map) == len(frame_data_list), "All pts values within video should be unique."
+            max_frame_pts = max(frame_pts_map.keys())
+
+            assert self._seek_pts(keyframe_info.pts)
+            for frame in self._decode_frames():
+                assert frame.pts is not None
+                assert frame.pts <= max_frame_pts, "Target pts should exist in video."
+
+                if frame.pts in frame_pts_map:
+                    target_index = frame_pts_map.pop(frame.pts)
+                    found_frame_map[target_index] = frame
+                if len(frame_pts_map) == 0:
+                    break
+            assert len(frame_pts_map) == 0, "Target pts should exist in video."
+
+        found_frames: list[av.VideoFrame | None] = [None for _ in range(len(frame_indices))]
+        for frame_index, frame in found_frame_map.items():
+            pos = frame_index_to_original_pos[frame_index]
+            found_frames[pos] = frame
+
+        for frame in found_frames:
+            assert frame is not None, "Frame should be found."
+        return cast(list[av.VideoFrame], found_frames)
+
     def close(self) -> None:
         self._container.close()
 
@@ -231,77 +302,8 @@ def decode_video_frames(
     video_file: str | pathlib.Path,
     frame_indices: Iterable[int],
 ) -> list[av.VideoFrame]:
-    frame_indices = list(frame_indices)
-    if len(frame_indices) == 0:
-        return []
-
-    frame_index_to_original_pos = {frame_index: pos for pos, frame_index in enumerate(frame_indices)}
-    frame_indices.sort()
-
-    video_stream_info = get_video_stream_info(video_file)
-    video_frame_infos = get_video_frame_infos(video_file)
-    assert video_stream_info.num_frames == len(video_frame_infos)
-
-    if frame_indices[0] < 0:
-        msg = f"Frame index should be non-negative: {frame_indices[0]}"
-        raise ValueError(msg)
-    if frame_indices[-1] >= video_stream_info.num_frames:
-        msg = f"Frame index should be less than size: {frame_indices[-1]}"
-        raise ValueError(msg)
-
-    keyframe_indices: list[int] = []
-    keyframe_indices.append(0)  # frame at index 0 is an implicit keyframe
-    for i in range(1, len(video_frame_infos)):
-        if not video_frame_infos[i].is_keyframe:
-            continue
-        keyframe_indices.append(i)
-
-    keyframe_pts_map: dict[int, list[int]] = {}
-    for frame_index in frame_indices:
-        # locate keyframe at or before current frame
-        pos = np.searchsorted(keyframe_indices, frame_index, side="right") - 1
-        keyframe_index = keyframe_indices[pos]
-        keyframe_pts = video_frame_infos[keyframe_index].pts
-
-        if keyframe_pts not in keyframe_pts_map:
-            keyframe_pts_map[keyframe_pts] = []
-        keyframe_pts_map[keyframe_pts].append(frame_index)
-
-    found_frame_map: dict[int, av.VideoFrame] = {}
-    with av.open(video_file, "r") as container:
-        try:
-            stream = container.streams.video[0]
-        except IndexError:
-            msg = f"File should contain at least one video stream: {video_file}"
-            raise ValueError(msg)
-        stream.thread_type = "AUTO"
-
-        for keyframe_pts, target_indices in sorted(keyframe_pts_map.items()):
-            target_pts_map = {video_frame_infos[i].pts: i for i in target_indices}
-            assert len(target_pts_map) == len(target_indices), "All pts values within video should be unique."
-            max_target_pts = max(target_pts_map.keys())
-
-            container.seek(keyframe_pts, stream=stream)
-            for frame in container.decode(stream):
-                assert frame.pts is not None
-                assert frame.pts <= max_target_pts, "Target pts should exist in video."
-
-                if frame.pts in target_pts_map:
-                    target_index = target_pts_map.pop(frame.pts)
-                    found_frame_map[target_index] = frame
-                if len(target_pts_map) == 0:
-                    break
-
-            assert len(target_pts_map) == 0, "Target pts should exist in video."
-
-    found_frames: list[av.VideoFrame | None] = [None for _ in range(len(frame_indices))]
-    for frame_index, frame in found_frame_map.items():
-        pos = frame_index_to_original_pos[frame_index]
-        found_frames[pos] = frame
-
-    for frame in found_frames:
-        assert frame is not None
-    return cast(list[av.VideoFrame], found_frames)
+    with VideoReader(video_file) as video_reader:
+        return video_reader.decode_frames_by_indices(frame_indices)
 
 
 def decode_video_frames_into_numpy(
