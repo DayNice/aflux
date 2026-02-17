@@ -298,7 +298,7 @@ def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameI
         return video_reader.get_keyframe_infos()
 
 
-def decode_video_frames(
+def decode_video_frames_by_indices(
     video_file: str | pathlib.Path,
     frame_indices: Iterable[int],
 ) -> list[av.VideoFrame]:
@@ -306,33 +306,26 @@ def decode_video_frames(
         return video_reader.decode_frames_by_indices(frame_indices)
 
 
-def decode_video_frames_into_numpy(
-    video_file: str | pathlib.Path,
-    frame_indices: Iterable[int],
-) -> npt.NDArray[np.float32]:
-    frames = decode_video_frames(video_file, frame_indices)
-    if len(frames) == 0:
-        video_stream_info = get_video_stream_info(video_file)
-        shape = (0, video_stream_info.num_channels, video_stream_info.height, video_stream_info.width)
-        return np.empty(shape, dtype=np.float32)
+def convert_video_frames_into_rgb_numpy(video_frames: list[av.VideoFrame]) -> npt.NDArray[np.float32]:
+    video_reformatter = av.video.reformatter.VideoReformatter()
 
     arr_list: list[npt.NDArray[np.uint8]] = []
-    video_reformatter = av.video.reformatter.VideoReformatter()
-    for frame in frames:
+    for frame in video_frames:
         frame = video_reformatter.reformat(frame, format="rgb24")
         arr = cast(npt.NDArray[np.uint8], frame.to_ndarray())
         assert len(arr.shape) == 3
+
         arr = arr.transpose(2, 0, 1)
         arr_list.append(arr)
 
-    return np.stack(arr_list).astype(np.float32) / 255.0
+    return np.stack(arr_list, dtype=np.float32) / 255.0
 
 
 def compute_video_statistics(video_file: str | pathlib.Path) -> VideoStatistics:
     video_stream_info = get_video_stream_info(video_file)
-    indices = _stats_utils.compute_sample_indices(video_stream_info.num_frames)
+    indices = _stats_utils.get_sample_indices(video_stream_info.num_frames)
 
-    frames = decode_video_frames(video_file, indices)
+    frames = decode_video_frames_by_indices(video_file, indices)
 
     arr_list: list[npt.NDArray[np.uint8]] = []
     reformatter = av.video.reformatter.VideoReformatter()

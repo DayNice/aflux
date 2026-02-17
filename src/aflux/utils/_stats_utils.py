@@ -1,4 +1,4 @@
-def compute_sample_size(population_size: int) -> int:
+def get_sample_size(population_size: int) -> int:
     """Calculates the recommended sample size to obtain reliable proxies for Mean, Std Dev, and Min/Max.
 
     Returns the greater of the Mean, Std Dev, and Min/Max requirement, capped by the total population size.
@@ -44,8 +44,8 @@ def compute_sample_size(population_size: int) -> int:
     return sample_size
 
 
-def compute_sample_indices(population_size: int) -> list[int]:
-    sample_size = compute_sample_size(population_size)
+def get_sample_indices(population_size: int) -> list[int]:
+    sample_size = get_sample_size(population_size)
     if sample_size <= 1:
         return list(range(sample_size))
     if sample_size >= population_size:
