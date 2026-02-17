@@ -268,6 +268,53 @@ class VideoReader:
             assert frame is not None, "Frame should be found."
         return cast(list[av.VideoFrame], found_frames)
 
+    def compute_statistics(self) -> VideoStatistics:
+        sample_indices = _stats_utils.get_sample_indices(self._stream_info.num_frames)
+        frames = self.decode_frames_by_indices(sample_indices)
+
+        arr = self.convert_frames_into_rgb_numpy(frames)
+        assert len(arr.shape) == 4 and arr.shape[3] == 3, "RGB array should be of shape (N, H, W, 3)."
+
+        axis = (0, 1, 2)
+        min_value = arr.min(axis) / 255.0
+        max_value = arr.max(axis) / 255.0
+        mean_value = arr.mean(axis, dtype=np.float64) / 255.0
+        std_value = arr.std(axis, dtype=np.float64) / 255.0
+
+        statistics = VideoStatistics(
+            sample_size=arr.shape[0],
+            min=tuple(min_value.tolist()),
+            max=tuple(max_value.tolist()),
+            mean=tuple(mean_value.tolist()),
+            std=tuple(std_value.tolist()),
+        )
+        return statistics
+
+    @staticmethod
+    def convert_frames_into_rgb_numpy(frames: Iterable[av.VideoFrame]) -> npt.NDArray[np.uint8]:
+        """Convert video frames into RGB numpy.
+
+        Args:
+            frames: An iterable of video frames.
+
+        Returns:
+            An RGB array of dtype `uint8` and shape `(N, H, W, 3)`.
+        """
+
+        reformatter = av.video.reformatter.VideoReformatter()
+
+        arr_list: list[npt.NDArray[np.uint8]] = []
+        for frame in frames:
+            frame = reformatter.reformat(frame, format="rgb24")
+            arr = frame.to_ndarray()
+
+            assert arr.dtype == np.uint8, "RGB array should be type `uint8`."
+            assert len(arr.shape) == 3 and arr.shape[2] == 3, "RGB array should be of shape `(H, W, 3)`."
+            arr = cast(npt.NDArray[np.uint8], arr)
+
+            arr_list.append(arr)
+        return np.stack(arr_list)
+
     def close(self) -> None:
         self._container.close()
 
@@ -306,45 +353,9 @@ def decode_video_frames_by_indices(
         return video_reader.decode_frames_by_indices(frame_indices)
 
 
-def convert_video_frames_into_rgb_numpy(video_frames: list[av.VideoFrame]) -> npt.NDArray[np.float32]:
-    video_reformatter = av.video.reformatter.VideoReformatter()
-
-    arr_list: list[npt.NDArray[np.uint8]] = []
-    for frame in video_frames:
-        frame = video_reformatter.reformat(frame, format="rgb24")
-        arr = cast(npt.NDArray[np.uint8], frame.to_ndarray())
-        assert len(arr.shape) == 3
-
-        arr = arr.transpose(2, 0, 1)
-        arr_list.append(arr)
-
-    return np.stack(arr_list, dtype=np.float32) / 255.0
-
-
 def compute_video_statistics(video_file: str | pathlib.Path) -> VideoStatistics:
-    video_stream_info = get_video_stream_info(video_file)
-    indices = _stats_utils.get_sample_indices(video_stream_info.num_frames)
-
-    frames = decode_video_frames_by_indices(video_file, indices)
-
-    arr_list: list[npt.NDArray[np.uint8]] = []
-    reformatter = av.video.reformatter.VideoReformatter()
-    for frame in frames:
-        arr = reformatter.reformat(frame, format="rgb24").to_ndarray()
-        assert arr.dtype == np.uint8 and len(arr.shape) == 3 and arr.shape[-1] == 3
-        arr = cast(npt.NDArray[np.uint8], arr)  # (H, W, 3)
-        arr_list.append(arr)
-    arr = np.stack(arr_list)  # (N, H, W, 3)
-
-    axis = (0, 1, 2)
-    statistics = VideoStatistics(
-        sample_size=arr.shape[0],
-        min=tuple((arr.min(axis) / 255.0).tolist()),
-        max=tuple((arr.max(axis) / 255.0).tolist()),
-        mean=tuple((arr.mean(axis, dtype=np.float64) / 255.0).tolist()),
-        std=tuple((arr.std(axis, dtype=np.float64) / 255.0).tolist()),
-    )
-    return statistics
+    with VideoReader(video_file) as video_reader:
+        return video_reader.compute_statistics()
 
 
 def remux_video_into_mp4(
