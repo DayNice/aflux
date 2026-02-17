@@ -73,6 +73,17 @@ class VideoReader:
         assert self._stream.average_rate is not None
         return self._stream.time_base * self._stream.average_rate
 
+    def _get_num_frames(self) -> int:
+        # we assume the first frame is a keyframe
+        min_pts = self._first_keyframe_pts
+        max_pts = 0
+        assert self._seek_pts(self._last_keyframe_pts)
+        for packet in self._demux_packets():
+            if packet.pts is None:
+                continue
+            max_pts = max(max_pts, packet.pts)
+        return math.ceil((max_pts - min_pts) * self._frames_per_time_base) + 1
+
     @functools.cached_property
     def _stream_info(self) -> VideoStreamInfo:
         # stream attributes available in read mode
@@ -99,16 +110,17 @@ class VideoReader:
         )
         return video_stream_info
 
-    def _get_num_frames(self) -> int:
-        # we assume the first frame is a keyframe
-        min_pts = self._first_keyframe_pts
-        max_pts = 0
-        assert self._seek_pts(self._last_keyframe_pts)
+    def _demux_frame_infos(self) -> Iterator[VideoFrameInfo]:
         for packet in self._demux_packets():
             if packet.pts is None:
                 continue
-            max_pts = max(max_pts, packet.pts)
-        return math.ceil((max_pts - min_pts) * self._frames_per_time_base) + 1
+            frame_info = VideoFrameInfo(
+                timestamp=packet.pts * self._stream_info.time_base,
+                dts=packet.dts if packet.dts is not None else packet.pts,
+                pts=packet.pts,
+                is_keyframe=packet.is_keyframe,
+            )
+            yield frame_info
 
     def _estimate_frame_pts_by_index(self, frame_index: int) -> int:
         if frame_index < 0:
@@ -178,18 +190,6 @@ class VideoReader:
         assert isinstance(frame_info, VideoFrameInfo)
         assert frame_info.is_keyframe, "Packet should belong to a keyframe."
         return frame_info
-
-    def _demux_frame_infos(self) -> Iterator[VideoFrameInfo]:
-        for packet in self._demux_packets():
-            if packet.pts is None:
-                continue
-            frame_info = VideoFrameInfo(
-                timestamp=packet.pts * self._stream_info.time_base,
-                dts=packet.dts if packet.dts is not None else packet.pts,
-                pts=packet.pts,
-                is_keyframe=packet.is_keyframe,
-            )
-            yield frame_info
 
     def close(self) -> None:
         self._container.close()
