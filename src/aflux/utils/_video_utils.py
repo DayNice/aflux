@@ -343,7 +343,7 @@ def compute_video_statistics(video_file: str | pathlib.Path) -> VideoStatistics:
         assert arr.dtype == np.uint8 and len(arr.shape) == 3 and arr.shape[-1] == 3
         arr = cast(npt.NDArray[np.uint8], arr)  # (H, W, 3)
         arr_list.append(arr)
-    arr = cast(npt.NDArray[np.uint8], np.stack(arr_list))  # (N, H, W, 3)
+    arr = np.stack(arr_list)  # (N, H, W, 3)
 
     axis = (0, 1, 2)
     statistics = VideoStatistics(
