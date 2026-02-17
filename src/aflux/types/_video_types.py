@@ -1,9 +1,11 @@
 from fractions import Fraction
 
-from pydantic import BaseModel, NonNegativeInt, PositiveInt
+from pydantic import BaseModel, ConfigDict, NonNegativeInt, PositiveInt
 
 
 class VideoStreamInfo(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     fps: Fraction
     time_base: Fraction
     height: PositiveInt
@@ -15,6 +17,8 @@ class VideoStreamInfo(BaseModel):
 
 
 class VideoFrameInfo(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     timestamp: Fraction
     dts: int
     pts: NonNegativeInt
@@ -22,6 +26,8 @@ class VideoFrameInfo(BaseModel):
 
 
 class VideoStatistics(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     sample_size: int
     min: tuple[float, float, float]
     max: tuple[float, float, float]

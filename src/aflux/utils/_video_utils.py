@@ -122,6 +122,21 @@ class VideoReader:
             )
             yield frame_info
 
+    @functools.cached_property
+    def _keyframe_infos(self) -> list[VideoFrameInfo]:
+        keyframe_infos: list[VideoFrameInfo] = []
+        prev_keyframe_pts: int = -1
+
+        while self._seek_pts(prev_keyframe_pts + 1, backward=False):
+            keyframe_info = next(self._demux_frame_infos())
+            assert isinstance(keyframe_info, VideoFrameInfo)
+            assert keyframe_info.is_keyframe, "Packet should belong to a keyframe."
+
+            keyframe_infos.append(keyframe_info)
+            prev_keyframe_pts = keyframe_info.pts
+
+        return keyframe_infos
+
     def _estimate_frame_pts_by_index(self, frame_index: int) -> int:
         if frame_index < 0:
             msg = f"Frame index should be non-negative: {frame_index}"
@@ -162,18 +177,7 @@ class VideoReader:
         return found_frame_info
 
     def get_keyframe_infos(self) -> list[VideoFrameInfo]:
-        keyframe_infos: list[VideoFrameInfo] = []
-        prev_keyframe_pts: int = -1
-
-        while self._seek_pts(prev_keyframe_pts + 1, backward=False):
-            keyframe_info = next(self._demux_frame_infos())
-            assert isinstance(keyframe_info, VideoFrameInfo)
-            assert keyframe_info.is_keyframe, "Packet should belong to a keyframe."
-
-            keyframe_infos.append(keyframe_info)
-            prev_keyframe_pts = keyframe_info.pts
-
-        return keyframe_infos
+        return self._keyframe_infos
 
     def get_first_keyframe_info(self) -> VideoFrameInfo:
         assert self._seek_pts(0, backward=False)
