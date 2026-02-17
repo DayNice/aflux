@@ -158,22 +158,24 @@ class VideoReader:
         frame_infos.sort(key=lambda el: el.timestamp)
         return frame_infos
 
-    def get_first_frame_info(self) -> VideoFrameInfo:
-        # we assume the first frame is a keyframe
-        frame_info = self.get_first_keyframe_info()
-        assert self._stream.start_time is not None, "Failed to determine start time."
-        assert frame_info.pts == self._stream.start_time
-        return frame_info
+    def get_frame_info_by_index(self, frame_index: int) -> VideoFrameInfo:
+        estimated_frame_pts = self._estimate_frame_pts_by_index(frame_index)
 
-    def get_last_frame_info(self) -> VideoFrameInfo:
+        pts_duration_per_frame = 1 / self._frames_per_time_base
+        pts_tolerance = Fraction(1, 2) * pts_duration_per_frame
+        # assume at least 1 keyframe per 100 frames
+        pts_guard = 100 * pts_duration_per_frame
+
         found_frame_info: VideoFrameInfo | None = None
-
-        assert self._seek_pts(self._last_keyframe_pts)
+        assert self._seek_pts(estimated_frame_pts)
         for frame_info in self._demux_frame_infos():
-            if found_frame_info is None or found_frame_info.pts < frame_info.pts:
+            pts_diff = abs(frame_info.pts - estimated_frame_pts)
+            if pts_diff <= pts_tolerance:
                 found_frame_info = frame_info
+                break
+            assert pts_diff <= pts_guard, "Frame should be within demuxing range."
 
-        assert found_frame_info is not None
+        assert found_frame_info is not None, "Frame should be within tolerance."
         return found_frame_info
 
     def get_keyframe_infos(self) -> list[VideoFrameInfo]:
@@ -220,19 +222,9 @@ def get_video_frame_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo
         return video_reader.get_frame_infos()
 
 
-def get_video_last_frame_info(video_file: str | pathlib.Path) -> VideoFrameInfo:
-    with VideoReader(video_file) as video_reader:
-        return video_reader.get_last_frame_info()
-
-
 def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo]:
     with VideoReader(video_file) as video_reader:
         return video_reader.get_keyframe_infos()
-
-
-def get_video_last_keyframe_info(video_file: str | pathlib.Path) -> VideoFrameInfo:
-    with VideoReader(video_file) as video_reader:
-        return video_reader.get_last_keyframe_info()
 
 
 def decode_video_frames(
