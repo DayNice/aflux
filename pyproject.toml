@@ -1,12 +1,22 @@
 [project]
 name = "aflux"
 version = "0.1.0"
+description = "aflux"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "DayNice", email = "76981513+DayNice@users.noreply.github.com" }
+]
 requires-python = ">=3.12"
 dependencies = [
     "av>=16.1.0",
     "numpy>=2.4.2",
     "pydantic>=2.12.5",
 ]
+
+[project.urls]
+Repository = "https://github.com/DayNice/aflux"
 
 [build-system]
 requires = ["uv_build>=0.10.2,<0.11.0"]
