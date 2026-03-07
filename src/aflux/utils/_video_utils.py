@@ -179,8 +179,8 @@ class VideoReader:
 
         pts_duration_per_frame = 1 / self._frames_per_time_base
         pts_tolerance = Fraction(1, 2) * pts_duration_per_frame
-        # assume at least 1 keyframe per 100 frames
-        pts_guard = 100 * pts_duration_per_frame
+        # assume at least 1 keyframe per 720 frames
+        pts_guard = 720 * pts_duration_per_frame
 
         found_frame_info: VideoFrameInfo | None = None
         assert self._seek_pts(estimated_frame_pts)
