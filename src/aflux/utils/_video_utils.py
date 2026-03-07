@@ -213,18 +213,17 @@ class VideoReader:
         assert frame_info.is_keyframe, "Packet should belong to a keyframe."
         return frame_info
 
-    def decode_frames_by_indices(self, frame_indices: Iterable[int]) -> list[av.VideoFrame]:
+    def decode_frames_by_indices(self, frame_indices: Iterable[int]) -> Iterator[av.VideoFrame]:
         frame_indices = list(frame_indices)
         if len(frame_indices) == 0:
-            return []
-        frame_index_to_original_pos = {frame_index: pos for pos, frame_index in enumerate(frame_indices)}
-        frame_indices.sort()
+            return
 
-        if frame_indices[0] < 0:
-            msg = f"Frame index should be non-negative: {frame_indices[0]}"
+        sorted_frame_indices = sorted(frame_indices)
+        if sorted_frame_indices[0] < 0:
+            msg = f"Frame index should be non-negative: {sorted_frame_indices[0]}"
             raise ValueError(msg)
-        if frame_indices[-1] >= self._stream_info.num_frames:
-            msg = f"Frame index should be less than size: {frame_indices[-1]}"
+        if sorted_frame_indices[-1] >= self._stream_info.num_frames:
+            msg = f"Frame index should be less than size: {sorted_frame_indices[-1]}"
             raise ValueError(msg)
 
         class _FrameData(TypedDict):
@@ -232,7 +231,8 @@ class VideoReader:
             frame_info: VideoFrameInfo
 
         keyframe_map: dict[VideoFrameInfo, list[_FrameData]] = {}
-        for frame_index in frame_indices:
+        keyframe_reverse_map: dict[int, VideoFrameInfo] = {}
+        for frame_index in sorted_frame_indices:
             frame_info = self.get_frame_info_by_index(frame_index)
             frame_data: _FrameData = {"frame_index": frame_index, "frame_info": frame_info}
             keyframe_info = self._search_keyframe_info_by_pts(frame_info.pts)
@@ -240,9 +240,17 @@ class VideoReader:
             if keyframe_info not in keyframe_map:
                 keyframe_map[keyframe_info] = []
             keyframe_map[keyframe_info].append(frame_data)
+            keyframe_reverse_map[frame_index] = keyframe_info
 
         found_frame_map: dict[int, av.VideoFrame] = {}
-        for keyframe_info, frame_data_list in sorted(keyframe_map.items(), key=lambda el: el[0].pts):
+        for frame_index in frame_indices:
+            if frame_index in found_frame_map:
+                yield found_frame_map.pop(frame_index)
+                continue
+
+            keyframe_info = keyframe_reverse_map[frame_index]
+            frame_data_list = keyframe_map[keyframe_info]
+
             frame_pts_map = {el["frame_info"].pts: el["frame_index"] for el in frame_data_list}
             assert len(frame_pts_map) == len(frame_data_list), "All pts values within video should be unique."
             max_frame_pts = max(frame_pts_map.keys())
@@ -253,20 +261,13 @@ class VideoReader:
                 assert frame.pts <= max_frame_pts, "Target pts should exist in video."
 
                 if frame.pts in frame_pts_map:
-                    target_index = frame_pts_map.pop(frame.pts)
-                    found_frame_map[target_index] = frame
+                    decoded_index = frame_pts_map.pop(frame.pts)
+                    found_frame_map[decoded_index] = frame
                 if len(frame_pts_map) == 0:
                     break
             assert len(frame_pts_map) == 0, "Target pts should exist in video."
 
-        found_frames: list[av.VideoFrame | None] = [None for _ in range(len(frame_indices))]
-        for frame_index, frame in found_frame_map.items():
-            pos = frame_index_to_original_pos[frame_index]
-            found_frames[pos] = frame
-
-        for frame in found_frames:
-            assert frame is not None, "Frame should be found."
-        return cast(list[av.VideoFrame], found_frames)
+            yield found_frame_map.pop(frame_index)
 
     def compute_statistics(self) -> VideoStatistics:
         sample_indices = _stats_utils.get_sample_indices(self._stream_info.num_frames)
@@ -348,9 +349,9 @@ def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameI
 def decode_video_frames_by_indices(
     video_file: str | pathlib.Path,
     frame_indices: Iterable[int],
-) -> list[av.VideoFrame]:
+) -> Iterator[av.VideoFrame]:
     with VideoReader(video_file) as video_reader:
-        return video_reader.decode_frames_by_indices(frame_indices)
+        yield from video_reader.decode_frames_by_indices(frame_indices)
 
 
 def compute_video_statistics(video_file: str | pathlib.Path) -> VideoStatistics:
