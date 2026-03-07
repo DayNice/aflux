@@ -218,6 +218,10 @@ class VideoReader:
         if len(frame_indices) == 0:
             return
 
+        if len(frame_indices) != len(set(frame_indices)):
+            msg = "Frame indices should be unique."
+            raise ValueError(msg)
+
         sorted_frame_indices = sorted(frame_indices)
         if sorted_frame_indices[0] < 0:
             msg = f"Frame index should be non-negative: {sorted_frame_indices[0]}"
