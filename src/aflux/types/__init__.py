@@ -1,3 +1,6 @@
+from ._bucket_types import (
+    BucketFileMeta,
+)
 from ._video_types import (
     VideoFrameInfo,
     VideoStatistics,
@@ -5,6 +8,7 @@ from ._video_types import (
 )
 
 __all__ = [
+    "BucketFileMeta",
     "VideoFrameInfo",
     "VideoStatistics",
     "VideoStreamInfo",

@@ -4,6 +4,10 @@ from ._batch_utils import (
     iter_batch,
     run_batch,
 )
+from ._bucket_utils import (
+    DirBucket,
+    S3Bucket,
+)
 from ._stats_utils import (
     get_sample_indices,
     get_sample_size,
@@ -19,6 +23,8 @@ from ._video_utils import (
 )
 
 __all__ = [
+    "DirBucket",
+    "S3Bucket",
     "VideoReader",
     "aiter_batch",
     "arun_batch",
