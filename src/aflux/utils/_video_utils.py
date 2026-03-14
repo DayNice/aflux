@@ -31,6 +31,9 @@ class VideoReader:
         self._stream = self._container.streams.video[0]
         self._stream.thread_type = "AUTO"
 
+        # preload stream info to prevent implicit seek while demuxing or decoding
+        self._stream_info
+
     def _seek_pts(self, pts: int, *, backward: bool = True) -> bool:
         try:
             self._container.seek(pts, backward=backward, stream=self._stream)
