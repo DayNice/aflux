@@ -126,22 +126,29 @@ class DirBucket(Bucket):
     def _get_remote_file(self, remote_path: str) -> pathlib.Path:
         return self._root_dir / remote_path
 
+    def _validate_remote_file(self, remote_path: str) -> pathlib.Path:
+        remote_file = self._get_remote_file(remote_path)
+        if not remote_file.is_file():
+            msg = f"Remote file does not exist: {remote_path!r}"
+            raise ValueError(msg)
+        return remote_file
+
     def check_file_exists(self, remote_path: str) -> bool:
         remote_file = self._get_remote_file(remote_path)
         return remote_file.is_file()
 
     def get_file_meta(self, remote_path: str) -> BucketFileMeta:
-        remote_file = self._get_remote_file(remote_path)
+        remote_file = self._validate_remote_file(remote_path)
         file_stat = remote_file.stat()
         size = file_stat.st_size
         last_modified = datetime.datetime.fromtimestamp(file_stat.st_mtime, datetime.UTC)
         return BucketFileMeta(path=remote_path, size=size, last_modified=last_modified)
 
     def get_file(self, remote_path: str, *, refresh: bool = False) -> pathlib.Path:
-        return self._get_remote_file(remote_path)
+        return self._validate_remote_file(remote_path)
 
     def get_bytes(self, remote_path: str, *, refresh: bool = False) -> bytes:
-        return self._get_remote_file(remote_path).read_bytes()
+        return self._validate_remote_file(remote_path).read_bytes()
 
     def put_file(self, local_file: str | pathlib.Path, remote_path: str) -> None:
         remote_file = self._get_remote_file(remote_path)
