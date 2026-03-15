@@ -97,6 +97,7 @@ class S3Bucket(Bucket):
         bucket_key = self._get_bucket_key(remote_path)
         self._s3_client.upload_fileobj(io.BytesIO(local_bytes), self._bucket_name, bucket_key)
 
+    @override
     def delete_file(self, remote_path: str) -> None:
         bucket_key = self._get_bucket_key(remote_path)
         self._s3_client.delete_object(Bucket=self._bucket_name, Key=bucket_key)
@@ -133,10 +134,12 @@ class DirBucket(Bucket):
             raise ValueError(msg)
         return remote_file
 
+    @override
     def check_file_exists(self, remote_path: str) -> bool:
         remote_file = self._get_remote_file(remote_path)
         return remote_file.is_file()
 
+    @override
     def get_file_meta(self, remote_path: str) -> BucketFileMeta:
         remote_file = self._validate_remote_file(remote_path)
         file_stat = remote_file.stat()
@@ -144,22 +147,27 @@ class DirBucket(Bucket):
         last_modified = datetime.datetime.fromtimestamp(file_stat.st_mtime, datetime.UTC)
         return BucketFileMeta(path=remote_path, size=size, last_modified=last_modified)
 
+    @override
     def get_file(self, remote_path: str, *, refresh: bool = False) -> pathlib.Path:
         return self._validate_remote_file(remote_path)
 
+    @override
     def get_bytes(self, remote_path: str, *, refresh: bool = False) -> bytes:
         return self._validate_remote_file(remote_path).read_bytes()
 
+    @override
     def put_file(self, local_file: str | pathlib.Path, remote_path: str) -> None:
         remote_file = self._get_remote_file(remote_path)
         remote_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(local_file, remote_file)
 
+    @override
     def put_bytes(self, local_bytes: bytes, remote_path: str) -> None:
         remote_file = self._get_remote_file(remote_path)
         remote_file.parent.mkdir(parents=True, exist_ok=True)
         remote_file.write_bytes(local_bytes)
 
+    @override
     def delete_file(self, remote_path: str) -> None:
         remote_file = self._get_remote_file(remote_path)
         if not remote_file.exists():
