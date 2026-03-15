@@ -103,7 +103,13 @@ class S3Bucket(Bucket):
         self._s3_client.delete_object(Bucket=self._bucket_name, Key=bucket_key)
 
     def clear_temp_dir(self) -> None:
-        shutil.rmtree(self._temp_dir, ignore_errors=True)
+        if not self._temp_dir.exists():
+            return
+        for path in self._temp_dir.iterdir():
+            if path.is_file():
+                path.unlink()
+                continue
+            shutil.rmtree(path, ignore_errors=True)
 
     def __enter__(self) -> Self:
         return self
