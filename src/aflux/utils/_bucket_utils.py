@@ -3,6 +3,7 @@ import io
 import pathlib
 import shutil
 import tempfile
+import weakref
 from types import TracebackType
 from typing import TYPE_CHECKING, Self, override
 
@@ -30,9 +31,12 @@ class S3Bucket(Bucket):
         self._bucket_name = bucket_name
         self._bucket_prefix = bucket_prefix
 
-        if temp_dir is None:
-            temp_dir = tempfile.mkdtemp()
-        self._temp_dir = pathlib.Path(temp_dir)
+        if temp_dir is not None:
+            self._temp_dir = pathlib.Path(temp_dir)
+            self._temp_dir_finalizer = None
+        else:
+            self._temp_dir = pathlib.Path(tempfile.mkdtemp())
+            self._temp_dir_finalizer = weakref.finalize(self, shutil.rmtree, self._temp_dir, ignore_errors=True)
 
         if s3_client is None:
             s3_client = boto3.client("s3")
