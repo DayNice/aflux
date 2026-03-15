@@ -31,7 +31,7 @@ class S3Bucket(Bucket):
         self._bucket_prefix = bucket_prefix
 
         if temp_dir is None:
-            temp_dir = tempfile.TemporaryDirectory().name
+            temp_dir = tempfile.mkdtemp()
         self._temp_dir = pathlib.Path(temp_dir)
 
         if s3_client is None:
