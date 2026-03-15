@@ -91,7 +91,7 @@ class VideoReader:
             if packet.pts is None:
                 continue
             max_pts = max(max_pts, packet.pts)
-        return math.ceil((max_pts - min_pts) * self._frames_per_time_base) + 1
+        return round((max_pts - min_pts) * self._frames_per_time_base) + 1
 
     @functools.cached_property
     def _stream_info(self) -> VideoStreamInfo:
