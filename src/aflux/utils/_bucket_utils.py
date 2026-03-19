@@ -32,10 +32,10 @@ class S3Bucket(Bucket):
         self._bucket_prefix = bucket_prefix
 
         if temp_dir is not None:
-            self._temp_dir = pathlib.Path(temp_dir)
+            self._temp_dir = pathlib.Path(temp_dir).resolve()
             self._temp_dir_finalizer = None
         else:
-            self._temp_dir = pathlib.Path(tempfile.mkdtemp())
+            self._temp_dir = pathlib.Path(tempfile.mkdtemp()).resolve()
             self._temp_dir_finalizer = weakref.finalize(self, shutil.rmtree, self._temp_dir, ignore_errors=True)
 
         if s3_client is None:
@@ -43,7 +43,11 @@ class S3Bucket(Bucket):
         self._s3_client = s3_client
 
     def _get_remote_file(self, remote_path: str) -> pathlib.Path:
-        return self._temp_dir / remote_path
+        remote_file = (self._temp_dir / remote_path).resolve()
+        if not remote_file.is_relative_to(self._temp_dir):
+            msg = f"Remote path escapes temp directory: {remote_path!r}"
+            raise ValueError(msg)
+        return remote_file
 
     def _get_bucket_key(self, remote_path: str) -> str:
         return f"{self._bucket_prefix}{remote_path}"
@@ -69,7 +73,7 @@ class S3Bucket(Bucket):
 
     @override
     def get_file(self, remote_path: str, *, refresh: bool = False) -> pathlib.Path:
-        remote_file = self._temp_dir / remote_path
+        remote_file = self._get_remote_file(remote_path)
         if not refresh and remote_file.exists():
             return remote_file
         remote_file.parent.mkdir(parents=True, exist_ok=True)
@@ -128,10 +132,14 @@ class DirBucket(Bucket):
         self,
         root_dir: str | pathlib.Path,
     ):
-        self._root_dir = pathlib.Path(root_dir)
+        self._root_dir = pathlib.Path(root_dir).resolve()
 
     def _get_remote_file(self, remote_path: str) -> pathlib.Path:
-        return self._root_dir / remote_path
+        remote_file = (self._root_dir / remote_path).resolve()
+        if not remote_file.is_relative_to(self._root_dir):
+            msg = f"Remote path escapes root directory: {remote_path!r}"
+            raise ValueError(msg)
+        return remote_file
 
     def _validate_remote_file(self, remote_path: str) -> pathlib.Path:
         remote_file = self._get_remote_file(remote_path)
