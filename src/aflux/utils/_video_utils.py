@@ -26,6 +26,7 @@ class VideoReader:
         self.file = pathlib.Path(video_file)
         self._container = av.open(self.file)
         if len(self._container.streams.video) == 0:
+            self._container.close()
             msg = f"File should contain at least one video stream: {video_file}"
             raise ValueError(msg)
         self._stream = self._container.streams.video[0]
