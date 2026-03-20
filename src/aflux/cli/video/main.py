@@ -1,5 +1,4 @@
 import json
-import pathlib
 from collections.abc import Iterator
 from typing import Literal, cast
 
@@ -11,7 +10,7 @@ from rich.console import Console
 
 from aflux.utils import decode_video_frames_by_indices
 
-from ..parameters import Indices, VideoFile
+from ..parameters import Indices, OutputDir, VideoFile
 from .info import app as info_app
 
 app = App(help="Inspect a video.")
@@ -21,7 +20,7 @@ app.command(info_app, name="info")
 @app.command
 def frames(
     video_file: VideoFile,
-    output_dir: pathlib.Path,
+    output_dir: OutputDir,
     indices: Indices,
     *,
     image_suffix: Literal[".png", ".jpg", ".webp", ".avif"] = ".png",

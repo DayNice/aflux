@@ -4,9 +4,14 @@ from typing import Annotated, Sequence
 
 from cyclopts import Parameter, Token, validators
 
+OutputDir = Annotated[
+    pathlib.Path,
+    Parameter(validator=validators.Path(file_okay=False)),
+]
+
 VideoFile = Annotated[
     pathlib.Path,
-    Parameter(validator=validators.Path(exists=True)),
+    Parameter(validator=validators.Path(exists=True, dir_okay=False)),
 ]
 
 
