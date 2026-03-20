@@ -1,9 +1,10 @@
 import json
 import pathlib
 from collections.abc import Iterator
-from typing import cast
+from typing import Literal, cast
 
 import av
+import PIL.Image
 import rich.progress
 from cyclopts import App
 from rich.console import Console
@@ -23,6 +24,7 @@ def frames(
     output_dir: pathlib.Path,
     indices: Indices,
     *,
+    image_suffix: Literal[".png", ".jpg", ".webp", ".avif"] = ".png",
     progress_bar: bool = False,
 ) -> None:
     """Save frames at given indices as image files."""
@@ -38,7 +40,8 @@ def frames(
     )
 
     for index, frame in iterator:
-        output_name = f"frame_{index:06d}.png"
-        output_file = output_dir / output_name
-        frame.to_image().save(output_file)
-        print(json.dumps({"frame_index": index, "output_name": output_name}))
+        image_name = f"frame_{index:06d}{image_suffix}"
+        image_file = output_dir / image_name
+        pil_image = cast(PIL.Image.Image, frame.to_image())
+        pil_image.save(image_file)
+        print(json.dumps({"frame_index": index, "image_file": image_file.as_posix()}))
