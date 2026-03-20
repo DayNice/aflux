@@ -11,7 +11,7 @@ VideoFile = Annotated[
 
 
 def _parse_indices[T](type_: type[T], tokens: Sequence[Token]) -> list[int]:
-    """Parse indices given as a comma-separated integers and/or start:stop[:step] ranges.
+    """Parse indices given as comma-separated integers and/or start:stop[:step] ranges.
 
     Examples:
         "0,10,20"
@@ -35,6 +35,6 @@ Indices = Annotated[
     Parameter(
         converter=_parse_indices,
         n_tokens=1,
-        help="Indices given as a comma-separated integers and/or start:stop[:step] ranges.",
+        help="Indices given as comma-separated integers and/or start:stop[:step] ranges.",
     ),
 ]
