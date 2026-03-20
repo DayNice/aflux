@@ -17,6 +17,9 @@ dependencies = [
     "pydantic>=2.12.5",
 ]
 
+[project.scripts]
+aflux = "aflux.cli.main:app"
+
 [project.urls]
 Repository = "https://github.com/DayNice/aflux"
 
