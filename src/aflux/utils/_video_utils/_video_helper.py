@@ -1,11 +1,14 @@
-import fractions
+import itertools
 import pathlib
 from collections.abc import Iterable, Iterator
+from fractions import Fraction
+from typing import cast
 
 import av
 import av.container
 import av.stream
 import av.video.reformatter
+import PIL.Image
 
 from aflux.types import VideoFrameInfo, VideoStatistics, VideoStreamInfo
 
@@ -59,9 +62,9 @@ def remux_video_into_mp4(
             match input_stream:
                 case av.VideoStream():
                     # 90,000Hz
-                    output_stream.time_base = fractions.Fraction(1, 90000)
+                    output_stream.time_base = Fraction(1, 90000)
                 case av.AudioStream():
-                    output_stream.time_base = fractions.Fraction(1, input_stream.rate)
+                    output_stream.time_base = Fraction(1, input_stream.rate)
                 case _:
                     assert input_stream.time_base is not None
                     output_stream.time_base = input_stream.time_base
@@ -74,3 +77,46 @@ def remux_video_into_mp4(
             output_stream = output_stream_map[packet.stream.index]
             packet.stream = output_stream
             output_container.mux(packet)
+
+
+def encode_images_into_mp4(
+    images: Iterable[PIL.Image.Image],
+    output_file: str | pathlib.Path,
+    *,
+    fps: Fraction = Fraction(30, 1),
+    bits_per_pixel: Fraction = Fraction(1, 25),
+):
+    output_file = pathlib.Path(output_file)
+
+    images = iter(images)
+    sample_image = next(images, None)
+    if sample_image is None:
+        raise ValueError("Provide at least one image.")
+    images = itertools.chain([sample_image], images)
+
+    bits_per_sec = sample_image.width * sample_image.height * fps * bits_per_pixel
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    encoder_options = {
+        "preset": "6",
+        "crf": "26",
+        "svtav1-params": "tune=0",
+        "maxrate": f"{round(bits_per_sec)}",
+        "bufsize": f"{round(bits_per_sec * 2)}",
+    }
+
+    with av.open(output_file, "w", format="mp4") as container:
+        stream = cast(av.VideoStream, container.add_stream("libsvtav1", fps, encoder_options))
+        stream.width = sample_image.width
+        stream.height = sample_image.height
+        stream.pix_fmt = "yuv420p10le"
+        stream.gop_size = round(fps * 2)
+        stream.time_base = Fraction(1, 90000)
+
+        for image in images:
+            frame = av.VideoFrame.from_image(image)
+            for packet in stream.encode(frame):
+                container.mux(packet)
+
+        for packet in stream.encode():
+            container.mux(packet)
