@@ -24,6 +24,8 @@ class BaseKey[T](metaclass=ABCMeta):
 
 
 class AttrKey[T](BaseKey[T]):
+    __match_args__ = ("name",)
+
     def __init__(self, name: str) -> None:
         self.name = name
 
@@ -37,6 +39,8 @@ class AttrKey[T](BaseKey[T]):
 
 
 class ItemKey[T: Sequence](BaseKey[T]):
+    __match_args__ = ("index",)
+
     def __init__(self, index: int) -> None:
         self.index = index
 
@@ -60,6 +64,8 @@ class SpreadKey[T: Iterable](BaseKey[T]):
 
 
 class ChainKey[T](BaseKey[T]):
+    __match_args__ = ("parts",)
+
     # (name | [index]) followed by (.name | [index])
     _text_pattern: ClassVar[re.Pattern[str]] = re.compile(r"^(?:\w+|\[(?:-\d+|\d*)\])(?:\.\w+|\[(?:-\d+|\d*)\])*$")
     _token_pattern: ClassVar[re.Pattern[str]] = re.compile(r"(?P<name>\w+)|\[(?P<index>-?\d+)?\]")
