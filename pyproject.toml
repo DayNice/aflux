@@ -17,6 +17,7 @@ dependencies = [
     "pillow>=12.1.1",
     "pydantic>=2.12.5",
     "rich>=14.3.3",
+    "rosbags>=0.11.0",
 ]
 
 [project.scripts]
