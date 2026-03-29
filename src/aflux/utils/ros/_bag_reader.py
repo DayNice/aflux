@@ -11,7 +11,11 @@ from rosbags.typesys.store import Typestore
 
 from aflux.utils import Key
 
-from ._message_node import validate_message_field_getter
+from ._message_node import (
+    StructNode,
+    parse_msgtype_into_node,
+    validate_message_field_getter,
+)
 
 
 class BagReader:
@@ -31,6 +35,18 @@ class BagReader:
     def topic_info_map(self) -> dict[str, TopicInfo]:
         return self._reader.topics.copy()
 
+    def _validate_topic_unique_msgtype(self, topic: str) -> str:
+        topic_info = self.topic_info_map[topic]
+        msgtypes = sorted(set(el.msgtype for el in topic_info.connections))
+        assert len(msgtypes) != 0, "Topic should have at least one connection."
+        if len(msgtypes) != 1:
+            raise ValueError("Topic has multiple message types, operation not supported.")
+        return msgtypes[0]
+
+    def get_message_node(self, topic: str) -> StructNode:
+        msgtype = self._validate_topic_unique_msgtype(topic)
+        return parse_msgtype_into_node(self._reader.typestore, msgtype)
+
     def get_raw_bytes(self, topic: str) -> Iterator[tuple[int, str, bytes]]:
         topic_info = self.topic_info_map[topic]
         for connection, timestamp, rawdata in self._reader.messages(connections=topic_info.connections):
@@ -41,18 +57,21 @@ class BagReader:
             message = self._reader.deserialize(rawdata, msgtype)
             yield timestamp, message
 
+    def dump_messages(self, topic: str) -> Iterator[tuple[int, dict[str, Any]]]:
+        node = self.get_message_node(topic)
+        for timestamp, message in self.get_messages(topic):
+            yield timestamp, node.dump_message(message)
+
     def get_message_fields(self, topic: str, keys: Iterable[str | Key]) -> Iterator[tuple[int, list[Any]]]:
-        topic_info = self.topic_info_map[topic]
-
-        msgtypes = sorted(set(el.msgtype for el in topic_info.connections))
-        assert len(msgtypes) != 0, "Topic should have at least one message type."
-        if len(msgtypes) != 1:
-            raise ValueError("Topic has multiple message types, field access is not supported.")
-        msgtype = msgtypes[0]
-
+        msgtype = self._validate_topic_unique_msgtype(topic)
         getters = [validate_message_field_getter(self._reader.typestore, msgtype, key) for key in keys]
         for timestamp, message in self.get_messages(topic):
             yield timestamp, [el(message) for el in getters]
+
+    def dump_message_fields(self, topic: str, keys: Iterable[str | Key]) -> Iterator[tuple[int, list[Any]]]:
+        node = self.get_message_node(topic)
+        for timestamp, message in self.get_messages(topic):
+            yield timestamp, [node.dump_message_with_key(message, key) for key in keys]
 
     def close(self) -> None:
         self._reader.close()
