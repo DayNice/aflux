@@ -79,18 +79,46 @@ class IterKey(BaseKey):
         return "[]"
 
 
+class PickKey(BaseKey):
+    """A key for picking an object into a list."""
+
+    __match_args__ = ("names",)
+
+    def __init__(self, names: Iterable[str]) -> None:
+        self._names = tuple(names)
+        if len(self._names) == 0:
+            msg = "Provide at least one name."
+            raise ValueError(msg)
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return self._names
+
+    @override
+    def __call__(self, obj: Any) -> list[Any]:
+        return [getattr(obj, name) for name in self.names]
+
+    @override
+    def __str__(self) -> str:
+        return f"{{{','.join(self.names)}}}"
+
+
 class Key(BaseKey):
     """A key for accessing attributes and items of an object."""
 
     __match_args__ = ("parts",)
 
-    # (name | [index]) followed by (.name | [index])
-    _text_pattern: ClassVar[re.Pattern[str]] = re.compile(r"^(?:\w+|\[(?:-\d+|\d*)\])(?:\.\w+|\[(?:-\d+|\d*)\])*$")
-    _token_pattern: ClassVar[re.Pattern[str]] = re.compile(r"(?P<name>\w+)|\[(?P<index>-?\d+)?\]")
+    # (name | {name1,name2} | [index]) followed by (.name | .{name1,name2} | [index])
+    _text_pattern: ClassVar[re.Pattern[str]] = re.compile(
+        r"^(?:\w+|\{\w+(?:,\w+)*\}|\[(?:-\d+|\d*)\])(?:\.\w+|\.\{\w+(?:,\w+)*\}|\[(?:-\d+|\d*)\])*$"
+    )
+    _token_pattern: ClassVar[re.Pattern[str]] = re.compile(
+        r"(?P<name>\w+)|\{(?P<pick>\w+(?:,\w+)*)\}|\[(?P<index>-?\d+)?\]"
+    )
 
     def __init__(
         self,
-        parts: "str | Iterable[AttrKey | ItemKey | IterKey] | Key",
+        parts: "str | Iterable[AttrKey | ItemKey | IterKey | PickKey] | Key",
     ) -> None:
         """Create a key for accessing attributes and items of an object.
 
@@ -104,7 +132,7 @@ class Key(BaseKey):
             >>> Key([AttrKey("a"), ItemKey(0), IterKey(), AttrKey("b")])
             Key('a[0][].b')
         """
-        self._parts: tuple[AttrKey | ItemKey | IterKey, ...]
+        self._parts: tuple[AttrKey | ItemKey | IterKey | PickKey, ...]
         match parts:
             case Key() as key:
                 self._parts = tuple(key.parts)
@@ -117,7 +145,7 @@ class Key(BaseKey):
         self._getter: Callable[[Any], Any] | None = None
 
     @property
-    def parts(self) -> tuple[AttrKey | ItemKey | IterKey, ...]:
+    def parts(self) -> tuple[AttrKey | ItemKey | IterKey | PickKey, ...]:
         return self._parts
 
     @override
@@ -130,13 +158,13 @@ class Key(BaseKey):
     def __str__(self) -> str:
         text_parts: list[str] = [str(self.parts[0])]
         for part in self.parts[1:]:
-            if isinstance(part, AttrKey):
+            if isinstance(part, (AttrKey, PickKey)):
                 text_parts.append(".")
             text_parts.append(str(part))
         return "".join(text_parts)
 
     @classmethod
-    def parse(cls, text: str) -> list[AttrKey | ItemKey | IterKey]:
+    def parse(cls, text: str) -> list[AttrKey | ItemKey | IterKey | PickKey]:
         """Parse a text representation of a key into corresponding parts.
 
         Args:
@@ -150,18 +178,20 @@ class Key(BaseKey):
             [AttrKey('a'), AttrKey('b')]
             >>> Key.parse("[][-1]")
             [IterKey('[]'), ItemKey('[-1]')]
-            >>> Key.parse("a[0][].b")
-            [AttrKey('a'), ItemKey('[0]'), IterKey('[]'), AttrKey('b')]
+            >>> Key.parse("a[0][].{x,y}")
+            [AttrKey('a'), ItemKey('[0]'), IterKey('[]'), PickKey('{x,y}')]
         """
         if cls._text_pattern.fullmatch(text) is None:
             msg = f"Text representation of key is invalid: {text!r}"
             raise ValueError(msg)
 
-        parts: list[AttrKey | ItemKey | IterKey] = []
+        parts: list[AttrKey | ItemKey | IterKey | PickKey] = []
         for m in cls._token_pattern.finditer(text):
-            name, index_str = m.group("name"), m.group("index")
+            name, pick, index_str = m.group("name"), m.group("pick"), m.group("index")
             if name is not None:
                 parts.append(AttrKey(name=name))
+            elif pick is not None:
+                parts.append(PickKey(names=pick.split(",")))
             elif index_str is not None:
                 parts.append(ItemKey(index=int(index_str)))
             else:
@@ -170,10 +200,10 @@ class Key(BaseKey):
 
     def _build_getter(self) -> Callable[[Any], Any]:
         def chain_key_with_getter(
-            key: AttrKey | ItemKey | IterKey,
+            key: AttrKey | ItemKey | IterKey | PickKey,
             getter: Callable[[Any], Any],
         ) -> Callable[[Any], Any]:
-            if isinstance(key, IterKey):
+            if isinstance(key, (IterKey, PickKey)):
                 return lambda obj: [getter(el) for el in key(obj)]
             return lambda obj: getter(key(obj))
 

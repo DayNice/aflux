@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aflux.utils import AttrKey, ItemKey, IterKey, Key
+from aflux.utils import AttrKey, ItemKey, IterKey, Key, PickKey
 
 
 def ns(**kwargs: object) -> SimpleNamespace:
@@ -26,6 +26,11 @@ _VALID_PARSE_CASES = [
     # iterate
     ("a[]", [AttrKey(name="a"), IterKey()]),
     ("a[].b", [AttrKey(name="a"), IterKey(), AttrKey(name="b")]),
+    # pick
+    ("{x,y}", [PickKey(names=["x", "y"])]),
+    ("a.{x,y}", [AttrKey(name="a"), PickKey(names=["x", "y"])]),
+    ("{a,b}[0]", [PickKey(names=["a", "b"]), ItemKey(index=0)]),
+    ("items[].{x,y}", [AttrKey(name="items"), IterKey(), PickKey(names=["x", "y"])]),
     # consecutive brackets
     ("a[0][]", [AttrKey(name="a"), ItemKey(index=0), IterKey()]),
     ("a[0][].b", [AttrKey(name="a"), ItemKey(index=0), IterKey(), AttrKey(name="b")]),
@@ -49,6 +54,11 @@ _INVALID_PARSE_CASES = [
     "a[",  # unclosed bracket
     "a]",  # unmatched closing bracket
     "a.[]",  # dot before a leading bracket
+    "{}",  # empty pick
+    "{a,}",  # trailing comma
+    "{,b}",  # leading comma
+    ".{a,b}",  # leading dot before a pick
+    "a.{x, y}",  # whitespace in pick
 ]
 
 
@@ -133,3 +143,16 @@ class TestKeyGetter:
 
         def test_iter_then_negative_index(self) -> None:
             assert Key("[][-1]")([[1, 2], [3, 4], [5]]) == [2, 4, 5]
+
+    class TestPickKey:
+        def test_pick_basic(self) -> None:
+            assert Key("{x,y}")(ns(x=1, y=2, z=3)) == [1, 2]
+
+        def test_pick_chained(self) -> None:
+            assert Key("a.{x,y}")(ns(a=ns(x=10, y=20))) == [10, 20]
+
+        def test_pick_then_attr(self) -> None:
+            assert Key("{a,b}.val")(ns(a=ns(val=1), b=ns(val=2))) == [1, 2]
+
+        def test_pick_then_index(self) -> None:
+            assert Key("{a,b}[-1]")(ns(a=[1, 2], b=[3, 4])) == [2, 4]

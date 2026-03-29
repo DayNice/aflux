@@ -13,6 +13,7 @@ from ._key_utils import (
     ItemKey,
     IterKey,
     Key,
+    PickKey,
 )
 from ._stats_utils import (
     get_sample_indices,
@@ -35,6 +36,7 @@ __all__ = [
     "ItemKey",
     "IterKey",
     "Key",
+    "PickKey",
     "S3Bucket",
     "VideoReader",
     "aiter_batch",
