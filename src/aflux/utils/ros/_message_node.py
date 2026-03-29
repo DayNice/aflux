@@ -24,6 +24,9 @@ class BaseNode(metaclass=ABCMeta):
             return hash(self) == hash(other)
         raise NotImplementedError
 
+    @abstractmethod
+    def transition(self, key: AttrKey | ItemKey | IterKey) -> "MessageNode": ...
+
 
 class LeafNode(BaseNode):
     __match_args__ = ("dtype", "max_length")
@@ -42,8 +45,12 @@ class LeafNode(BaseNode):
 
     def __str__(self) -> str:
         if self.max_length != 0:
-            f"{self.dtype}<={self.max_length}"
+            return f"{self.dtype}<={self.max_length}"
         return f"{self.dtype}"
+
+    def transition(self, key: AttrKey | ItemKey | IterKey) -> "MessageNode":
+        msg = f"Invalid attribute or item access against a leaf: {str(self)!r} {str(key)!r}"
+        raise ValueError(msg)
 
 
 class StructNode(BaseNode):
@@ -63,6 +70,16 @@ class StructNode(BaseNode):
 
     def __str__(self) -> str:
         return self.dtype
+
+    def transition(self, key: AttrKey | ItemKey | IterKey) -> "MessageNode":
+        if isinstance(key, AttrKey):
+            field_node = self.field_node_map.get(key.name)
+            if field_node is None:
+                msg = f"Requested attribute does not exist: {str(self)!r} {str(key)!r}"
+                raise ValueError(msg)
+            return field_node
+        msg = f"Invalid item access against a struct: {str(self)!r} {str(key)!r}"
+        raise ValueError(msg)
 
 
 class ArrayNode(BaseNode):
@@ -86,6 +103,12 @@ class ArrayNode(BaseNode):
 
     def __str__(self) -> str:
         return self.dtype
+
+    def transition(self, key: AttrKey | ItemKey | IterKey) -> "MessageNode":
+        if isinstance(key, (ItemKey, IterKey)):
+            return self.item_node
+        msg = f"Invalid attribute access against an array: {str(self)!r} {str(key)!r}"
+        raise ValueError(msg)
 
 
 class ListNode(BaseNode):
@@ -111,6 +134,12 @@ class ListNode(BaseNode):
         if self.max_size != 0:
             return f"{self.item_node.dtype}[<={self.max_size}]"
         return f"{self.item_node.dtype}[]"
+
+    def transition(self, key: AttrKey | ItemKey | IterKey) -> "MessageNode":
+        if isinstance(key, (ItemKey, IterKey)):
+            return self.item_node
+        msg = f"Invalid attribute access against a list: {str(self)!r} {str(key)!r}"
+        raise ValueError(msg)
 
 
 type MessageNode = Union[LeafNode, StructNode, ArrayNode, ListNode]
@@ -147,30 +176,6 @@ def parse_field_value_into_node(typestore: Typestore, field_value: FieldDesc) ->
             raise ValueError(f"Unexpected field value: {field_value!r}")
 
 
-def transition_node(node: MessageNode, key: AttrKey | ItemKey | IterKey):
-    match node, key:
-        case LeafNode(), _:
-            msg = f"Invalid attribute or item access against a leaf: {str(node)!r} {str(key)!r}"
-            raise ValueError(msg)
-        case StructNode(_, field_node_map), AttrKey(field_name):
-            field_node = field_node_map.get(field_name)
-            if field_node is None:
-                msg = f"Requested attribute does not exist: {str(node)!r} {str(key)!r}"
-                raise ValueError(msg)
-            return field_node
-        case StructNode(), ItemKey() | IterKey():
-            msg = f"Invalid item access against a struct: {str(node)!r} {str(key)!r}"
-            raise ValueError(msg)
-        case ArrayNode() | ListNode(), AttrKey(field_name):
-            msg = f"Invalid attribute access against an array or list: {str(node)!r} {str(key)!r}"
-            raise ValueError(msg)
-        case ArrayNode() | ListNode() as node, ItemKey() | IterKey():
-            return node.item_node
-        case _:
-            msg = f"Unknown node and key combination: {node!r} {key!r}"
-            raise ValueError(msg)
-
-
 def validate_message_field_getter(
     typestore: Typestore,
     msgtype: str,
@@ -179,5 +184,5 @@ def validate_message_field_getter(
     key = Key(key)
     node: MessageNode = parse_msgtype_into_node(typestore, msgtype)
     for part in key.parts:
-        node = transition_node(node, part)
+        node = node.transition(part)
     return key
