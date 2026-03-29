@@ -5,6 +5,8 @@ from typing import Any, ClassVar, override
 
 
 class BaseKey(metaclass=ABCMeta):
+    """A key for use as an object's getter."""
+
     @abstractmethod
     def __call__(self, obj: Any) -> Any: ...
 
@@ -24,6 +26,8 @@ class BaseKey(metaclass=ABCMeta):
 
 
 class AttrKey(BaseKey):
+    """A key for accessing an object's attribute."""
+
     __match_args__ = ("name",)
 
     def __init__(self, name: str) -> None:
@@ -39,6 +43,8 @@ class AttrKey(BaseKey):
 
 
 class ItemKey(BaseKey):
+    """A key for accessing an object's item."""
+
     __match_args__ = ("index",)
 
     def __init__(self, index: int) -> None:
@@ -54,6 +60,8 @@ class ItemKey(BaseKey):
 
 
 class IterKey(BaseKey):
+    """A key for iterating an object into a list."""
+
     @override
     def __call__(self, obj: Any) -> list[Any]:
         return list(obj)
