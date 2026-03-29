@@ -1,12 +1,12 @@
 import re
 from abc import ABCMeta, abstractmethod
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable
 from typing import Any, ClassVar, Self, override
 
 
-class BaseKey[T](metaclass=ABCMeta):
+class BaseKey(metaclass=ABCMeta):
     @abstractmethod
-    def __call__(self, obj: T) -> Any: ...
+    def __call__(self, obj: Any) -> Any: ...
 
     @abstractmethod
     def __str__(self) -> str: ...
@@ -23,14 +23,14 @@ class BaseKey[T](metaclass=ABCMeta):
         raise NotImplementedError
 
 
-class AttrKey[T](BaseKey[T]):
+class AttrKey(BaseKey):
     __match_args__ = ("name",)
 
     def __init__(self, name: str) -> None:
         self.name = name
 
     @override
-    def __call__(self, obj: T) -> Any:
+    def __call__(self, obj: Any) -> Any:
         return getattr(obj, self.name)
 
     @override
@@ -38,14 +38,14 @@ class AttrKey[T](BaseKey[T]):
         return self.name
 
 
-class ItemKey[T: Sequence](BaseKey[T]):
+class ItemKey(BaseKey):
     __match_args__ = ("index",)
 
     def __init__(self, index: int) -> None:
         self.index = index
 
     @override
-    def __call__(self, obj: T) -> Any:
+    def __call__(self, obj: Any) -> Any:
         return obj[self.index]
 
     @override
@@ -53,9 +53,9 @@ class ItemKey[T: Sequence](BaseKey[T]):
         return f"[{self.index}]"
 
 
-class SpreadKey[T: Iterable](BaseKey[T]):
+class SpreadKey(BaseKey):
     @override
-    def __call__(self, obj: T) -> Any:
+    def __call__(self, obj: Any) -> Any:
         return list(obj)
 
     @override
@@ -63,7 +63,7 @@ class SpreadKey[T: Iterable](BaseKey[T]):
         return "[]"
 
 
-class ChainKey[T](BaseKey[T]):
+class ChainKey(BaseKey):
     __match_args__ = ("parts",)
 
     # (name | [index]) followed by (.name | [index])
@@ -74,10 +74,10 @@ class ChainKey[T](BaseKey[T]):
         self.parts = list(parts)
         if len(self.parts) == 0:
             raise ValueError("Provide at least one key part.")
-        self._getter: Callable[[T], Any] | None = None
+        self._getter: Callable[[Any], Any] | None = None
 
     @override
-    def __call__(self, obj: T) -> Any:
+    def __call__(self, obj: Any) -> Any:
         if self._getter is None:
             self._getter = self._build_getter()
         return self._getter(obj)
@@ -118,7 +118,7 @@ class ChainKey[T](BaseKey[T]):
                 parts.append(SpreadKey())
         return cls(parts=parts)
 
-    def _build_getter(self) -> Callable[[T], Any]:
+    def _build_getter(self) -> Callable[[Any], Any]:
         def chain_key_with_getter(
             key: AttrKey | ItemKey | SpreadKey,
             getter: Callable[[Any], Any],
