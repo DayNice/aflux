@@ -90,7 +90,7 @@ def validate_message_field_getter(
     msgtype: str,
     key: str,
 ) -> Key:
-    chain_key = Key.parse(key)
+    chain_key = Key(key)
     node: MessageNode = StructNode(name=msgtype)
     for part in chain_key.parts:
         node = transition_node(typestore, node, part)

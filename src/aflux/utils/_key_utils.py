@@ -1,7 +1,7 @@
 import re
 from abc import ABCMeta, abstractmethod
 from collections.abc import Callable, Iterable
-from typing import Any, ClassVar, Self, override
+from typing import Any, ClassVar, override
 
 
 class BaseKey(metaclass=ABCMeta):
@@ -64,14 +64,30 @@ class IterKey(BaseKey):
 
 
 class Key(BaseKey):
+    """A key for accessing attributes and items of an object."""
+
     __match_args__ = ("parts",)
 
     # (name | [index]) followed by (.name | [index])
     _text_pattern: ClassVar[re.Pattern[str]] = re.compile(r"^(?:\w+|\[(?:-\d+|\d*)\])(?:\.\w+|\[(?:-\d+|\d*)\])*$")
     _token_pattern: ClassVar[re.Pattern[str]] = re.compile(r"(?P<name>\w+)|\[(?P<index>-?\d+)?\]")
 
-    def __init__(self, parts: Iterable[AttrKey | ItemKey | IterKey]) -> None:
-        self.parts = list(parts)
+    def __init__(
+        self,
+        parts: str | Iterable[AttrKey | ItemKey | IterKey],
+    ) -> None:
+        """Create a key for accessing attributes and items of an object.
+
+        Args:
+            parts: A text representation of a key, or an iterable of its parts.
+
+        Examples:
+            >>> Key("a[0][].b")
+            Key('a[0][].b')
+            >>> Key([AttrKey("a"), ItemKey(0), IterKey(), AttrKey("b")])
+            Key('a[0][].b')
+        """
+        self.parts = self.parse(parts) if isinstance(parts, str) else list(parts)
         if len(self.parts) == 0:
             raise ValueError("Provide at least one key part.")
         self._getter: Callable[[Any], Any] | None = None
@@ -92,16 +108,22 @@ class Key(BaseKey):
         return "".join(text_parts)
 
     @classmethod
-    def parse(cls, text: str) -> Self:
-        """Parse a chain key from a text representation.
+    def parse(cls, text: str) -> list[AttrKey | ItemKey | IterKey]:
+        """Parse a text representation of a key into corresponding parts.
+
+        Args:
+            text: A text representation of a key.
+
+        Returns:
+            A list of parsed key parts.
 
         Examples:
             >>> Key.parse("a.b")
-            Key('a.b')
+            [AttrKey('a'), AttrKey('b')]
             >>> Key.parse("[][-1]")
-            Key('[][-1]')
+            [IterKey('[]'), ItemKey('[-1]')]
             >>> Key.parse("a[0][].b")
-            Key('a[0][].b')
+            [AttrKey('a'), ItemKey('[0]'), IterKey('[]'), AttrKey('b')]
         """
         if cls._text_pattern.fullmatch(text) is None:
             msg = f"Text representation of key is invalid: {text!r}"
@@ -116,7 +138,7 @@ class Key(BaseKey):
                 parts.append(ItemKey(index=int(index_str)))
             else:
                 parts.append(IterKey())
-        return cls(parts=parts)
+        return parts
 
     def _build_getter(self) -> Callable[[Any], Any]:
         def chain_key_with_getter(
