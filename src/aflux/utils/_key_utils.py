@@ -31,7 +31,11 @@ class AttrKey(BaseKey):
     __match_args__ = ("name",)
 
     def __init__(self, name: str) -> None:
-        self.name = name
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @override
     def __call__(self, obj: Any) -> Any:
@@ -48,7 +52,11 @@ class ItemKey(BaseKey):
     __match_args__ = ("index",)
 
     def __init__(self, index: int) -> None:
-        self.index = index
+        self._index = index
+
+    @property
+    def index(self) -> int:
+        return self._index
 
     @override
     def __call__(self, obj: Any) -> Any:
@@ -96,17 +104,21 @@ class Key(BaseKey):
             >>> Key([AttrKey("a"), ItemKey(0), IterKey(), AttrKey("b")])
             Key('a[0][].b')
         """
-        self.parts: list[AttrKey | ItemKey | IterKey]
+        self._parts: tuple[AttrKey | ItemKey | IterKey, ...]
         match parts:
             case Key() as key:
-                self.parts = list(key.parts)
+                self._parts = tuple(key.parts)
             case str() as text:
-                self.parts = self.parse(text)
+                self._parts = tuple(self.parse(text))
             case _:
-                self.parts = list(parts)
+                self._parts = tuple(parts)
         if len(self.parts) == 0:
             raise ValueError("Provide at least one key part.")
         self._getter: Callable[[Any], Any] | None = None
+
+    @property
+    def parts(self) -> tuple[AttrKey | ItemKey | IterKey, ...]:
+        return self._parts
 
     @override
     def __call__(self, obj: Any) -> Any:
