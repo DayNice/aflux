@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from typing import Any, Union, override
 
+import numpy as np
 from rosbags.interfaces import Nodetype, Typestore
 from rosbags.interfaces.typing import Basename, FieldDesc
 
@@ -25,7 +26,17 @@ class BaseNode(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def transition(self, key: AttrKey | ItemKey | IterKey | PickKey) -> "MessageNode": ...
+    def transition(self, key: AttrKey | ItemKey | IterKey | PickKey) -> "BaseNode": ...
+
+    @abstractmethod
+    def dump_message(self, message: Any) -> Any: ...
+
+    def dump_message_with_key(self, message: Any, key: str | Key) -> Any:
+        key = Key(key)
+        node = self
+        for part in key.parts:
+            node = node.transition(part)
+        return node.dump_message(key(message))
 
 
 class LeafNode(BaseNode):
@@ -53,6 +64,10 @@ class LeafNode(BaseNode):
     def transition(self, key: AttrKey | ItemKey | IterKey | PickKey) -> "MessageNode":
         msg = f"Invalid attribute or item access against a leaf: {str(self)!r} {str(key)!r}"
         raise ValueError(msg)
+
+    @override
+    def dump_message(self, message: Any) -> Any:
+        return message
 
 
 class StructNode(BaseNode):
@@ -105,6 +120,13 @@ class StructNode(BaseNode):
         msg = f"Invalid item access against a struct: {str(self)!r} {str(key)!r}"
         raise ValueError(msg)
 
+    @override
+    def dump_message(self, message: Any) -> dict[str, Any]:
+        return {
+            field_name: field_node.dump_message(getattr(message, field_name))
+            for field_name, field_node in self.field_node_map.items()
+        }
+
 
 class ArrayNode(BaseNode):
     __match_args__ = ("item_node", "size")
@@ -135,6 +157,12 @@ class ArrayNode(BaseNode):
             return self.item_node
         msg = f"Invalid attribute access against an array: {str(self)!r} {str(key)!r}"
         raise ValueError(msg)
+
+    @override
+    def dump_message(self, message: Any) -> np.ndarray | list[Any]:
+        if isinstance(message, np.ndarray):
+            return message
+        return [self.item_node.dump_message(item) for item in message]
 
 
 class ListNode(BaseNode):
@@ -168,6 +196,12 @@ class ListNode(BaseNode):
             return self.item_node
         msg = f"Invalid attribute access against a list: {str(self)!r} {str(key)!r}"
         raise ValueError(msg)
+
+    @override
+    def dump_message(self, message: Any) -> list[Any]:
+        if isinstance(message, np.ndarray):
+            return message
+        return [self.item_node.dump_message(item) for item in message]
 
 
 type MessageNode = Union[LeafNode, StructNode, ArrayNode, ListNode]

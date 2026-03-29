@@ -146,3 +146,52 @@ class TestParsing:
             assert isinstance(node, StructNode)
             assert node.dtype == "geometry_msgs/msg/Point"
             assert set(node.field_node_map.keys()) == {"x", "y", "z"}
+
+
+class TestDumpMessage:
+    def test_leaf_node(self) -> None:
+        node = LeafNode("float64")
+        assert node.dump_message(42.0) == 42.0
+
+    def test_struct_node(self) -> None:
+        from types import SimpleNamespace
+
+        node = StructNode("geometry_msgs/msg/Point", {"x": LeafNode("float64"), "y": LeafNode("float64")})
+        msg = SimpleNamespace(x=1.0, y=2.0)
+        assert node.dump_message(msg) == {"x": 1.0, "y": 2.0}
+
+    def test_array_node(self) -> None:
+        import numpy as np
+
+        node = ArrayNode(LeafNode("float64"), 3)
+        assert node.dump_message([1.0, 2.0, 3.0]) == [1.0, 2.0, 3.0]
+
+        arr = np.array([1.0, 2.0, 3.0])
+        assert node.dump_message(arr) is arr
+
+    def test_list_node(self) -> None:
+        import numpy as np
+
+        node = ListNode(LeafNode("float64"))
+        assert node.dump_message([1.0, 2.0]) == [1.0, 2.0]
+
+        arr = np.array([1.0, 2.0])
+        assert node.dump_message(arr) is arr
+
+    def test_dump_message_with_key(self) -> None:
+        from types import SimpleNamespace
+
+        node = StructNode(
+            "MyMsg", {"pts": ListNode(StructNode("Point", {"x": LeafNode("float64"), "y": LeafNode("float64")}))}
+        )
+
+        msg = SimpleNamespace(pts=[SimpleNamespace(x=1.0, y=2.0), SimpleNamespace(x=3.0, y=4.0)])
+
+        # Test basic attribute key
+        assert node.dump_message_with_key(msg, "pts") == [{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}]
+
+        # Test PickKey and IterKey
+        assert node.dump_message_with_key(msg, "pts[].{x,y}") == [[1.0, 2.0], [3.0, 4.0]]
+
+        # Test IterKey and AttrKey
+        assert node.dump_message_with_key(msg, "pts[].x") == [1.0, 3.0]
