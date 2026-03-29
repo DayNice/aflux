@@ -19,7 +19,7 @@ class LeafNode(BaseNode):
 
 
 class StructNode(BaseNode):
-    __match_args__ = ("name",)
+    __match_args__ = ("name", "field_node_map")
 
     name: str
     field_node_map: "dict[str, MessageNode]"
@@ -72,19 +72,17 @@ def parse_field_value_into_node(typestore: Typestore, field_value: FieldDesc) ->
             raise ValueError(f"Unexpected field value: {field_value!r}")
 
 
-def transition_node(typestore: Typestore, node: MessageNode, key: AttrKey | ItemKey | IterKey):
+def transition_node(node: MessageNode, key: AttrKey | ItemKey | IterKey):
     match node, key:
-        case LeafNode(), _:
-            raise ValueError("Invalid attribute or item access against a leaf.")
-        case StructNode(msgtype), AttrKey(field_name):
-            msgdef = typestore.get_msgdef(msgtype)
-            for field_info in msgdef.fields:
-                if field_info[0] == field_name:
-                    break
-            else:
-                msg = f"Requested attribute does not exist: {msgtype!r} {field_name!r}"
+        case LeafNode(name), _:
+            msg = f"Invalid attribute or item access against a leaf: {name!r}"
+            raise ValueError(msg)
+        case StructNode(name, field_node_map), AttrKey(field_name):
+            field_node = field_node_map.get(field_name)
+            if field_node is None:
+                msg = f"Requested attribute does not exist: {name!r} {field_name!r}"
                 raise ValueError(msg)
-            return parse_field_value_into_node(typestore, field_info[1])
+            return field_node
         case StructNode(), ItemKey() | IterKey():
             raise ValueError("Invalid item access against a struct.")
         case ArrayNode() | ListNode(), AttrKey():
@@ -103,5 +101,5 @@ def validate_message_field_getter(
     key = Key(key)
     node: MessageNode = parse_msgtype_into_node(typestore, msgtype)
     for part in key.parts:
-        node = transition_node(typestore, node, part)
+        node = transition_node(node, part)
     return key
