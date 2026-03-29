@@ -63,7 +63,7 @@ class SpreadKey(BaseKey):
         return "[]"
 
 
-class ChainKey(BaseKey):
+class Key(BaseKey):
     __match_args__ = ("parts",)
 
     # (name | [index]) followed by (.name | [index])
@@ -96,12 +96,12 @@ class ChainKey(BaseKey):
         """Parse a chain key from a text representation.
 
         Examples:
-            >>> ChainKey.parse("a.b")
-            ChainKey('a.b')
-            >>> ChainKey.parse("[][-1]")
-            ChainKey('[][-1]')
-            >>> ChainKey.parse("a[0][].b")
-            ChainKey('a[0][].b')
+            >>> Key.parse("a.b")
+            Key('a.b')
+            >>> Key.parse("[][-1]")
+            Key('[][-1]')
+            >>> Key.parse("a[0][].b")
+            Key('a[0][].b')
         """
         if cls._text_pattern.fullmatch(text) is None:
             msg = f"Text representation of key is invalid: {text!r}"

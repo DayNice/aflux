@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 from rosbags.interfaces import Nodetype, Typestore
 from rosbags.interfaces.typing import Basename, FieldDesc
 
-from aflux.utils import AttrKey, ChainKey, ItemKey, SpreadKey
+from aflux.utils import AttrKey, ItemKey, Key, SpreadKey
 
 
 class BaseNode(BaseModel):
@@ -89,8 +89,8 @@ def validate_message_field_getter(
     typestore: Typestore,
     msgtype: str,
     key: str,
-) -> ChainKey:
-    chain_key = ChainKey.parse(key)
+) -> Key:
+    chain_key = Key.parse(key)
     node: MessageNode = StructNode(name=msgtype)
     for part in chain_key.parts:
         node = transition_node(typestore, node, part)

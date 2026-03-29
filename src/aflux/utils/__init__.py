@@ -10,8 +10,8 @@ from ._bucket_utils import (
 )
 from ._key_utils import (
     AttrKey,
-    ChainKey,
     ItemKey,
+    Key,
     SpreadKey,
 )
 from ._stats_utils import (
@@ -31,9 +31,9 @@ from ._video_utils import (
 
 __all__ = [
     "AttrKey",
-    "ChainKey",
     "DirBucket",
     "ItemKey",
+    "Key",
     "S3Bucket",
     "SpreadKey",
     "VideoReader",
