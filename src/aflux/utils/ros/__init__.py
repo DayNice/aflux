@@ -9,6 +9,10 @@ from ._message_node import (
     parse_field_value_into_node,
     parse_msgtype_into_node,
 )
+from ._message_polars import (
+    convert_message_node_into_polars_dtype,
+    convert_message_node_with_key_into_polars_dtype,
+)
 
 __all__ = [
     "ArrayNode",
@@ -16,6 +20,8 @@ __all__ = [
     "LeafNode",
     "ListNode",
     "StructNode",
+    "convert_message_node_into_polars_dtype",
+    "convert_message_node_with_key_into_polars_dtype",
     "parse_field_value_into_node",
     "parse_msgtype_into_node",
 ]
