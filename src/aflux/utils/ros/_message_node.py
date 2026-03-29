@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 from rosbags.interfaces import Nodetype, Typestore
 from rosbags.interfaces.typing import Basename, FieldDesc
 
-from aflux.utils import AttrKey, ItemKey, Key, SpreadKey
+from aflux.utils import AttrKey, ItemKey, IterKey, Key
 
 
 class BaseNode(BaseModel):
@@ -62,7 +62,7 @@ def parse_field_value_into_node(field_value: FieldDesc):
             raise ValueError(f"Unexpected field value: {field_value!r}")
 
 
-def transition_node(typestore: Typestore, node: MessageNode, key: AttrKey | ItemKey | SpreadKey):
+def transition_node(typestore: Typestore, node: MessageNode, key: AttrKey | ItemKey | IterKey):
     match node, key:
         case LeafNode(), _:
             raise ValueError("Invalid attribute or item access against a leaf.")
@@ -75,11 +75,11 @@ def transition_node(typestore: Typestore, node: MessageNode, key: AttrKey | Item
                 msg = f"Requested attribute does not exist: {msgtype!r} {field_name!r}"
                 raise ValueError(msg)
             return parse_field_value_into_node(field_info[1])
-        case StructNode(), ItemKey() | SpreadKey():
+        case StructNode(), ItemKey() | IterKey():
             raise ValueError("Invalid item access against a struct.")
         case ArrayNode() | ListNode(), AttrKey():
             raise ValueError("Invalid attribute access against an array or list.")
-        case ArrayNode() | ListNode() as node, ItemKey() | SpreadKey():
+        case ArrayNode() | ListNode() as node, ItemKey() | IterKey():
             return node.item_node
         case _:
             raise ValueError(f"Unknown node and key combination: {node!r} {key!r}")

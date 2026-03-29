@@ -11,8 +11,8 @@ from ._bucket_utils import (
 from ._key_utils import (
     AttrKey,
     ItemKey,
+    IterKey,
     Key,
-    SpreadKey,
 )
 from ._stats_utils import (
     get_sample_indices,
@@ -33,9 +33,9 @@ __all__ = [
     "AttrKey",
     "DirBucket",
     "ItemKey",
+    "IterKey",
     "Key",
     "S3Bucket",
-    "SpreadKey",
     "VideoReader",
     "aiter_batch",
     "arun_batch",

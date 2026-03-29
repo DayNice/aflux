@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aflux.utils import AttrKey, ItemKey, Key, SpreadKey
+from aflux.utils import AttrKey, ItemKey, IterKey, Key
 
 
 def ns(**kwargs: object) -> SimpleNamespace:
@@ -23,19 +23,19 @@ _VALID_PARSE_CASES = [
     ("a[-1]", [AttrKey(name="a"), ItemKey(index=-1)]),
     ("a[-1].b", [AttrKey(name="a"), ItemKey(index=-1), AttrKey(name="b")]),
     ("a[-42].b", [AttrKey(name="a"), ItemKey(index=-42), AttrKey(name="b")]),
-    # spread
-    ("a[]", [AttrKey(name="a"), SpreadKey()]),
-    ("a[].b", [AttrKey(name="a"), SpreadKey(), AttrKey(name="b")]),
+    # iterate
+    ("a[]", [AttrKey(name="a"), IterKey()]),
+    ("a[].b", [AttrKey(name="a"), IterKey(), AttrKey(name="b")]),
     # consecutive brackets
-    ("a[0][]", [AttrKey(name="a"), ItemKey(index=0), SpreadKey()]),
-    ("a[0][].b", [AttrKey(name="a"), ItemKey(index=0), SpreadKey(), AttrKey(name="b")]),
-    ("a[][0]", [AttrKey(name="a"), SpreadKey(), ItemKey(index=0)]),
-    ("a[][-1]", [AttrKey(name="a"), SpreadKey(), ItemKey(index=-1)]),
+    ("a[0][]", [AttrKey(name="a"), ItemKey(index=0), IterKey()]),
+    ("a[0][].b", [AttrKey(name="a"), ItemKey(index=0), IterKey(), AttrKey(name="b")]),
+    ("a[][0]", [AttrKey(name="a"), IterKey(), ItemKey(index=0)]),
+    ("a[][-1]", [AttrKey(name="a"), IterKey(), ItemKey(index=-1)]),
     # leading bracket (no initial name)
     ("[0]", [ItemKey(index=0)]),
     ("[0].b", [ItemKey(index=0), AttrKey(name="b")]),
-    ("[]", [SpreadKey()]),
-    ("[][-1]", [SpreadKey(), ItemKey(index=-1)]),
+    ("[]", [IterKey()]),
+    ("[][-1]", [IterKey(), ItemKey(index=-1)]),
     ("[-1]", [ItemKey(index=-1)]),
 ]
 
@@ -78,7 +78,7 @@ class TestKeyGetter:
         def test_negative_index(self) -> None:
             assert Key.parse("items[-1]")(ns(items=[10, 20, 30])) == 30
 
-        def test_spread_returns_list(self) -> None:
+        def test_iter_returns_list(self) -> None:
             assert Key.parse("items[]")(ns(items=[10, 20, 30])) == [10, 20, 30]
 
     class TestChainedAttrs:
@@ -97,7 +97,7 @@ class TestKeyGetter:
             pts = [ns(x=1.0), ns(x=9.0)]
             assert Key.parse("pts[-1].x")(ns(pts=pts)) == 9.0
 
-    class TestSpreadThenAttr:
+    class TestIterThenAttr:
         def test_basic(self) -> None:
             pts = [ns(x=1.0), ns(x=2.0), ns(x=3.0)]
             assert Key.parse("pts[].x")(ns(pts=pts)) == [1.0, 2.0, 3.0]
@@ -107,17 +107,17 @@ class TestKeyGetter:
             assert Key.parse("items[].v")(ns(items=items)) == [0, 10, 20, 30, 40]
 
     class TestConsecutiveBrackets:
-        def test_spread_then_index(self) -> None:
+        def test_iter_then_index(self) -> None:
             assert Key.parse("rows[][-1]")(ns(rows=[[1, 2, 3], [4, 5, 6]])) == [3, 6]
 
-        def test_index_then_spread(self) -> None:
+        def test_index_then_iter(self) -> None:
             assert Key.parse("matrix[0][]")(ns(matrix=[[1, 2, 3], [4, 5, 6]])) == [1, 2, 3]
 
-        def test_spread_then_attr_then_index(self) -> None:
+        def test_iter_then_attr_then_index(self) -> None:
             rows = [ns(vals=[10, 20]), ns(vals=[30, 40])]
             assert Key.parse("rows[].vals[0]")(ns(rows=rows)) == [10, 30]
 
-        def test_spread_then_negative_index(self) -> None:
+        def test_iter_then_negative_index(self) -> None:
             rows = [ns(vals=[1, 2, 3]), ns(vals=[4, 5])]
             assert Key.parse("rows[].vals[-1]")(ns(rows=rows)) == [3, 5]
 
@@ -128,8 +128,8 @@ class TestKeyGetter:
         def test_negative_index(self) -> None:
             assert Key.parse("[-1]")([10, 20, 30]) == 30
 
-        def test_spread(self) -> None:
+        def test_iter(self) -> None:
             assert Key.parse("[]")([10, 20, 30]) == [10, 20, 30]
 
-        def test_spread_then_negative_index(self) -> None:
+        def test_iter_then_negative_index(self) -> None:
             assert Key.parse("[][-1]")([[1, 2], [3, 4], [5]]) == [2, 4, 5]

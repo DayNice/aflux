@@ -53,9 +53,9 @@ class ItemKey(BaseKey):
         return f"[{self.index}]"
 
 
-class SpreadKey(BaseKey):
+class IterKey(BaseKey):
     @override
-    def __call__(self, obj: Any) -> Any:
+    def __call__(self, obj: Any) -> list[Any]:
         return list(obj)
 
     @override
@@ -70,7 +70,7 @@ class Key(BaseKey):
     _text_pattern: ClassVar[re.Pattern[str]] = re.compile(r"^(?:\w+|\[(?:-\d+|\d*)\])(?:\.\w+|\[(?:-\d+|\d*)\])*$")
     _token_pattern: ClassVar[re.Pattern[str]] = re.compile(r"(?P<name>\w+)|\[(?P<index>-?\d+)?\]")
 
-    def __init__(self, parts: Iterable[AttrKey | ItemKey | SpreadKey]) -> None:
+    def __init__(self, parts: Iterable[AttrKey | ItemKey | IterKey]) -> None:
         self.parts = list(parts)
         if len(self.parts) == 0:
             raise ValueError("Provide at least one key part.")
@@ -107,7 +107,7 @@ class Key(BaseKey):
             msg = f"Text representation of key is invalid: {text!r}"
             raise ValueError(msg)
 
-        parts: list[AttrKey | ItemKey | SpreadKey] = []
+        parts: list[AttrKey | ItemKey | IterKey] = []
         for m in cls._token_pattern.finditer(text):
             name, index_str = m.group("name"), m.group("index")
             if name is not None:
@@ -115,15 +115,15 @@ class Key(BaseKey):
             elif index_str is not None:
                 parts.append(ItemKey(index=int(index_str)))
             else:
-                parts.append(SpreadKey())
+                parts.append(IterKey())
         return cls(parts=parts)
 
     def _build_getter(self) -> Callable[[Any], Any]:
         def chain_key_with_getter(
-            key: AttrKey | ItemKey | SpreadKey,
+            key: AttrKey | ItemKey | IterKey,
             getter: Callable[[Any], Any],
         ) -> Callable[[Any], Any]:
-            if isinstance(key, SpreadKey):
+            if isinstance(key, IterKey):
                 return lambda obj: [getter(el) for el in key(obj)]
             return lambda obj: getter(key(obj))
 
