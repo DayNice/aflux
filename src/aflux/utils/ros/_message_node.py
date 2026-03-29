@@ -88,10 +88,10 @@ def transition_node(typestore: Typestore, node: MessageNode, key: AttrKey | Item
 def validate_message_field_getter(
     typestore: Typestore,
     msgtype: str,
-    key: str,
+    key: str | Key,
 ) -> Key:
-    chain_key = Key(key)
+    key = Key(key)
     node: MessageNode = StructNode(name=msgtype)
-    for part in chain_key.parts:
+    for part in key.parts:
         node = transition_node(typestore, node, part)
-    return chain_key
+    return key

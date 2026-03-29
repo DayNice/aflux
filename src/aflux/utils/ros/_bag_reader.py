@@ -9,6 +9,8 @@ from rosbags.interfaces import TopicInfo
 from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.store import Typestore
 
+from aflux.utils import Key
+
 from ._message_node import validate_message_field_getter
 
 
@@ -39,7 +41,7 @@ class BagReader:
             message = self._reader.deserialize(rawdata, msgtype)
             yield timestamp, message
 
-    def get_message_fields(self, topic: str, keys: Iterable[str]) -> Iterator[tuple[int, list[Any]]]:
+    def get_message_fields(self, topic: str, keys: Iterable[str | Key]) -> Iterator[tuple[int, list[Any]]]:
         topic_info = self.topic_info_map[topic]
 
         msgtypes = sorted(set(el.msgtype for el in topic_info.connections))

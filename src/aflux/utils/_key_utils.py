@@ -82,12 +82,13 @@ class Key(BaseKey):
 
     def __init__(
         self,
-        parts: str | Iterable[AttrKey | ItemKey | IterKey],
+        parts: "str | Iterable[AttrKey | ItemKey | IterKey] | Key",
     ) -> None:
         """Create a key for accessing attributes and items of an object.
 
         Args:
             parts: A text representation of a key, or an iterable of its parts.
+                Passing a Key instance is allowed for convenience.
 
         Examples:
             >>> Key("a[0][].b")
@@ -95,7 +96,14 @@ class Key(BaseKey):
             >>> Key([AttrKey("a"), ItemKey(0), IterKey(), AttrKey("b")])
             Key('a[0][].b')
         """
-        self.parts = self.parse(parts) if isinstance(parts, str) else list(parts)
+        self.parts: list[AttrKey | ItemKey | IterKey]
+        match parts:
+            case Key() as key:
+                self.parts = list(key.parts)
+            case str() as text:
+                self.parts = self.parse(text)
+            case _:
+                self.parts = list(parts)
         if len(self.parts) == 0:
             raise ValueError("Provide at least one key part.")
         self._getter: Callable[[Any], Any] | None = None
