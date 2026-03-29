@@ -12,16 +12,16 @@ class BaseNode(BaseModel):
 
 
 class LeafNode(BaseNode):
-    __match_args__ = ("name", "upper_bound")
+    __match_args__ = ("dtype", "upper_bound")
 
-    name: Basename
+    dtype: Basename
     upper_bound: int
 
 
 class StructNode(BaseNode):
-    __match_args__ = ("name", "field_node_map")
+    __match_args__ = ("dtype", "field_node_map")
 
-    name: str
+    dtype: str
     field_node_map: "dict[str, MessageNode]"
 
 
@@ -31,11 +31,19 @@ class ArrayNode(BaseNode):
     item_node: LeafNode | StructNode
     size: int
 
+    @property
+    def dtype(self) -> str:
+        return f"{self.item_node.dtype}[{self.size}]"
+
 
 class ListNode(BaseNode):
     __match_args__ = ("item_node",)
 
     item_node: LeafNode | StructNode
+
+    @property
+    def dtype(self) -> str:
+        return f"{self.item_node.dtype}[]"
 
 
 type MessageNode = Union[LeafNode, StructNode, ArrayNode, ListNode]
@@ -47,26 +55,26 @@ def parse_msgtype_into_node(typestore: Typestore, msgtype: str) -> StructNode:
     for field_name, field_value in msgdef.fields:
         field_node = parse_field_value_into_node(typestore, field_value)
         field_node_map[field_name] = field_node
-    return StructNode(name=msgtype, field_node_map=field_node_map)
+    return StructNode(dtype=msgtype, field_node_map=field_node_map)
 
 
 def parse_field_value_into_node(typestore: Typestore, field_value: FieldDesc) -> MessageNode:
     match field_value:
-        case (Nodetype.BASE, (name, upper_bound)):
-            return LeafNode(name=name, upper_bound=upper_bound)
-        case (Nodetype.NAME, name):
-            return parse_msgtype_into_node(typestore, name)
-        case (Nodetype.ARRAY, ((Nodetype.BASE, (name, upper_bound)), size)):
-            item_node = LeafNode(name=name, upper_bound=upper_bound)
+        case (Nodetype.BASE, (dtype, upper_bound)):
+            return LeafNode(dtype=dtype, upper_bound=upper_bound)
+        case (Nodetype.NAME, dtype):
+            return parse_msgtype_into_node(typestore, dtype)
+        case (Nodetype.ARRAY, ((Nodetype.BASE, (dtype, upper_bound)), size)):
+            item_node = LeafNode(dtype=dtype, upper_bound=upper_bound)
             return ArrayNode(item_node=item_node, size=size)
-        case (Nodetype.ARRAY, ((Nodetype.NAME, name), size)):
-            item_node = parse_msgtype_into_node(typestore, name)
+        case (Nodetype.ARRAY, ((Nodetype.NAME, dtype), size)):
+            item_node = parse_msgtype_into_node(typestore, dtype)
             return ArrayNode(item_node=item_node, size=size)
-        case (Nodetype.SEQUENCE, ((Nodetype.BASE, (name, upper_bound)), _)):
-            item_node = LeafNode(name=name, upper_bound=upper_bound)
+        case (Nodetype.SEQUENCE, ((Nodetype.BASE, (dtype, upper_bound)), _)):
+            item_node = LeafNode(dtype=dtype, upper_bound=upper_bound)
             return ListNode(item_node=item_node)
-        case (Nodetype.SEQUENCE, ((Nodetype.NAME, name), _)):
-            item_node = parse_msgtype_into_node(typestore, name)
+        case (Nodetype.SEQUENCE, ((Nodetype.NAME, dtype), _)):
+            item_node = parse_msgtype_into_node(typestore, dtype)
             return ListNode(item_node=item_node)
         case _:
             raise ValueError(f"Unexpected field value: {field_value!r}")
@@ -74,13 +82,13 @@ def parse_field_value_into_node(typestore: Typestore, field_value: FieldDesc) ->
 
 def transition_node(node: MessageNode, key: AttrKey | ItemKey | IterKey):
     match node, key:
-        case LeafNode(name), _:
-            msg = f"Invalid attribute or item access against a leaf: {name!r}"
+        case LeafNode(dtype), _:
+            msg = f"Invalid attribute or item access against a leaf: {dtype!r}"
             raise ValueError(msg)
-        case StructNode(name, field_node_map), AttrKey(field_name):
+        case StructNode(dtype, field_node_map), AttrKey(field_name):
             field_node = field_node_map.get(field_name)
             if field_node is None:
-                msg = f"Requested attribute does not exist: {name!r} {field_name!r}"
+                msg = f"Requested attribute does not exist: {dtype!r} {field_name!r}"
                 raise ValueError(msg)
             return field_node
         case StructNode(), ItemKey() | IterKey():
