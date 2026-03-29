@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Any, Union
+from typing import Any, Union, override
 
 from rosbags.interfaces import Nodetype, Typestore
 from rosbags.interfaces.typing import Basename, FieldDesc
@@ -43,11 +43,13 @@ class LeafNode(BaseNode):
     def max_length(self) -> int:
         return self._max_length
 
+    @override
     def __str__(self) -> str:
         if self.max_length != 0:
             return f"{self.dtype}<={self.max_length}"
         return f"{self.dtype}"
 
+    @override
     def transition(self, key: AttrKey | ItemKey | IterKey) -> "MessageNode":
         msg = f"Invalid attribute or item access against a leaf: {str(self)!r} {str(key)!r}"
         raise ValueError(msg)
@@ -68,9 +70,11 @@ class StructNode(BaseNode):
     def field_node_map(self) -> "dict[str, MessageNode]":
         return self._field_node_map
 
+    @override
     def __str__(self) -> str:
         return self.dtype
 
+    @override
     def transition(self, key: AttrKey | ItemKey | IterKey) -> "MessageNode":
         if isinstance(key, AttrKey):
             field_node = self.field_node_map.get(key.name)
@@ -101,9 +105,11 @@ class ArrayNode(BaseNode):
     def size(self) -> int:
         return self._size
 
+    @override
     def __str__(self) -> str:
         return self.dtype
 
+    @override
     def transition(self, key: AttrKey | ItemKey | IterKey) -> "MessageNode":
         if isinstance(key, (ItemKey, IterKey)):
             return self.item_node
@@ -130,11 +136,13 @@ class ListNode(BaseNode):
     def max_size(self) -> int:
         return self._max_size
 
+    @override
     def __str__(self) -> str:
         if self.max_size != 0:
             return f"{self.item_node.dtype}[<={self.max_size}]"
         return f"{self.item_node.dtype}[]"
 
+    @override
     def transition(self, key: AttrKey | ItemKey | IterKey) -> "MessageNode":
         if isinstance(key, (ItemKey, IterKey)):
             return self.item_node
