@@ -1,6 +1,11 @@
 from ._bag_reader import (
     BagReader,
 )
+from ._message_helper import (
+    read_message_schema_dir,
+    register_message_schema_dir,
+    register_message_schema_map,
+)
 from ._message_node import (
     ArrayNode,
     LeafNode,
@@ -24,4 +29,7 @@ __all__ = [
     "convert_message_node_with_key_into_polars_dtype",
     "parse_field_value_into_node",
     "parse_msgtype_into_node",
+    "read_message_schema_dir",
+    "register_message_schema_dir",
+    "register_message_schema_map",
 ]
