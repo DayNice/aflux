@@ -4,6 +4,7 @@ from collections.abc import Iterable, Iterator
 from types import TracebackType
 from typing import Any, Self
 
+import polars as pl
 from rosbags.highlevel import AnyReader
 from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.store import Typestore
@@ -16,6 +17,7 @@ from ._message_node import (
     parse_msgtype_into_node,
     validate_message_field_getter,
 )
+from ._message_polars import convert_message_node_into_polars_dtype
 
 
 class BagReader:
@@ -64,6 +66,22 @@ class BagReader:
         node = self.get_message_node(topic)
         for timestamp, message in self.get_messages(topic):
             yield timestamp, node.dump_message(message)
+
+    def get_message_dataframe(self, topic: str) -> pl.DataFrame:
+        node = self.get_message_node(topic)
+        schema = pl.Schema(
+            {
+                "timestamp": pl.Int64,
+                topic: convert_message_node_into_polars_dtype(node),
+            }
+        )
+
+        records: list[dict[str, Any]] = []
+        for timestamp, message in self.dump_messages(topic):
+            record = {"timestamp": timestamp, topic: message}
+            records.append(record)
+
+        return pl.from_dicts(records, schema=schema)
 
     def get_message_fields(self, topic: str, keys: Iterable[str | Key]) -> Iterator[tuple[int, list[Any]]]:
         topic_info = self.topic_info_map[topic]
