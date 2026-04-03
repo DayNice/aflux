@@ -5,10 +5,10 @@ from types import TracebackType
 from typing import Any, Self
 
 from rosbags.highlevel import AnyReader
-from rosbags.interfaces import TopicInfo
 from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.store import Typestore
 
+from aflux.types.ros import TopicInfo
 from aflux.utils import Key
 
 from ._message_node import (
@@ -33,23 +33,26 @@ class BagReader:
 
     @functools.cached_property
     def topic_info_map(self) -> dict[str, TopicInfo]:
-        return self._reader.topics.copy()
-
-    def _validate_topic_unique_msgtype(self, topic: str) -> str:
-        topic_info = self.topic_info_map[topic]
-        msgtypes = sorted(set(el.msgtype for el in topic_info.connections))
-        assert len(msgtypes) != 0, "Topic should have at least one connection."
-        if len(msgtypes) != 1:
-            raise ValueError("Topic has multiple message types, operation not supported.")
-        return msgtypes[0]
+        topic_info_map: dict[str, TopicInfo] = {}
+        for topic, raw_topic_info in self._reader.topics.items():
+            if raw_topic_info.msgtype is None:
+                msg = f"Topic with multiple message types is unsupported: {topic!r}"
+                raise ValueError(msg)
+            topic_info = TopicInfo(
+                topic=topic,
+                message_type=raw_topic_info.msgtype,
+                num_messages=raw_topic_info.msgcount,
+            )
+            topic_info_map[topic] = topic_info
+        return topic_info_map
 
     def get_message_node(self, topic: str) -> StructNode:
-        msgtype = self._validate_topic_unique_msgtype(topic)
-        return parse_msgtype_into_node(self._reader.typestore, msgtype)
+        topic_info = self.topic_info_map[topic]
+        return parse_msgtype_into_node(self._reader.typestore, topic_info.message_type)
 
     def get_raw_bytes(self, topic: str) -> Iterator[tuple[int, str, bytes]]:
-        topic_info = self.topic_info_map[topic]
-        for connection, timestamp, rawdata in self._reader.messages(connections=topic_info.connections):
+        connections = self._reader.topics[topic].connections
+        for connection, timestamp, rawdata in self._reader.messages(connections):
             yield timestamp, connection.msgtype, rawdata
 
     def get_messages(self, topic: str) -> Iterator[tuple[int, Any]]:
@@ -63,8 +66,8 @@ class BagReader:
             yield timestamp, node.dump_message(message)
 
     def get_message_fields(self, topic: str, keys: Iterable[str | Key]) -> Iterator[tuple[int, list[Any]]]:
-        msgtype = self._validate_topic_unique_msgtype(topic)
-        getters = [validate_message_field_getter(self._reader.typestore, msgtype, key) for key in keys]
+        topic_info = self.topic_info_map[topic]
+        getters = [validate_message_field_getter(self._reader.typestore, topic_info.message_type, key) for key in keys]
         for timestamp, message in self.get_messages(topic):
             yield timestamp, [el(message) for el in getters]
 
