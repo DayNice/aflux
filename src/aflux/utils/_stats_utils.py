@@ -19,8 +19,10 @@ def get_sample_size(population_size: int) -> int:
 
     - Min/Max:
       - Assumption: 95% Confidence of capturing at least one value in the top 1%.
-      - Base Requirement: ~299 samples.
-      - Formula: n = ln(1 - C) / ln(1 - p)
+      - Base Requirement: ~366 samples.
+      - Formula: n = ln(1 - sqrt(C)) / ln(1 - p)
+        - Asymptotic via small p = 0.01
+        - sqrt(C) due to non-independent event between Min and Max
 
     Args:
         population_size: The total size of the population (N).
@@ -30,7 +32,7 @@ def get_sample_size(population_size: int) -> int:
     """
 
     BASE_MEAN_SAMPLE_SIZE = 385
-    BASE_MIN_MAX_SAMPLE_SIZE = 299
+    BASE_MIN_MAX_SAMPLE_SIZE = 366
 
     if population_size <= 0:
         return 0
