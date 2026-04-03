@@ -2,8 +2,34 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Union, override
 
 import numpy as np
+import polars as pl
 from rosbags.interfaces import Nodetype, Typestore
 from rosbags.interfaces.typing import Basename, FieldDesc
+
+
+def _basename_to_polars_dtype(basename: Basename) -> pl.DataType:
+    mapping: dict[Basename, pl.DataType] = {
+        "bool": pl.Boolean(),
+        "byte": pl.UInt8(),
+        "char": pl.Int8(),
+        "int8": pl.Int8(),
+        "int16": pl.Int16(),
+        "int32": pl.Int32(),
+        "int64": pl.Int64(),
+        "uint8": pl.UInt8(),
+        "uint16": pl.UInt16(),
+        "uint32": pl.UInt32(),
+        "uint64": pl.UInt64(),
+        "float32": pl.Float32(),
+        "float64": pl.Float64(),
+        # "float128": pl.Float64(),  # polars doesn't have an equivalent dtype
+        "string": pl.String(),
+    }
+
+    if basename not in mapping:
+        msg = f"Unsupported ROS basename: {basename}"
+        raise ValueError(msg)
+    return mapping[basename]
 
 
 class BaseNode(metaclass=ABCMeta):
@@ -25,6 +51,9 @@ class BaseNode(metaclass=ABCMeta):
 
     @abstractmethod
     def dump_message(self, message: Any) -> Any: ...
+
+    @abstractmethod
+    def to_polars_dtype(self) -> pl.DataType: ...
 
 
 class LeafNode(BaseNode):
@@ -52,6 +81,10 @@ class LeafNode(BaseNode):
     def dump_message(self, message: Any) -> Any:
         return message
 
+    @override
+    def to_polars_dtype(self) -> pl.DataType:
+        return _basename_to_polars_dtype(self.dtype)
+
 
 class StructNode(BaseNode):
     __match_args__ = ("dtype", "field_node_map")
@@ -78,6 +111,13 @@ class StructNode(BaseNode):
             field_name: field_node.dump_message(getattr(message, field_name))
             for field_name, field_node in self.field_node_map.items()
         }
+
+    @override
+    def to_polars_dtype(self) -> pl.DataType:
+        field_dtype_map: dict[str, pl.DataType] = {}
+        for field_name, field_node in self.field_node_map.items():
+            field_dtype_map[field_name] = field_node.to_polars_dtype()
+        return pl.Struct(field_dtype_map)
 
 
 class ArrayNode(BaseNode):
@@ -108,6 +148,11 @@ class ArrayNode(BaseNode):
         if isinstance(message, np.ndarray):
             return message
         return [self.item_node.dump_message(item) for item in message]
+
+    @override
+    def to_polars_dtype(self) -> pl.DataType:
+        inner_dtype = self.item_node.to_polars_dtype()
+        return pl.Array(inner_dtype, shape=(self.size,))
 
 
 class ListNode(BaseNode):
@@ -140,6 +185,11 @@ class ListNode(BaseNode):
         if isinstance(message, np.ndarray):
             return message
         return [self.item_node.dump_message(item) for item in message]
+
+    @override
+    def to_polars_dtype(self) -> pl.DataType:
+        inner_dtype = self.item_node.to_polars_dtype()
+        return pl.List(inner_dtype)
 
 
 type MessageNode = Union[LeafNode, StructNode, ArrayNode, ListNode]

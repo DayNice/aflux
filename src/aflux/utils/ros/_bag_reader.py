@@ -15,7 +15,6 @@ from ._message_node import (
     StructNode,
     parse_message_type_into_node,
 )
-from ._message_polars import convert_message_node_into_polars_dtype
 
 
 class BagReader:
@@ -70,7 +69,7 @@ class BagReader:
         schema = pl.Schema(
             {
                 "timestamp": pl.Int64,
-                topic: convert_message_node_into_polars_dtype(node),
+                topic: node.to_polars_dtype(),
             }
         )
 
