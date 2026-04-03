@@ -1,4 +1,5 @@
 import itertools
+import math
 import pathlib
 from collections.abc import Iterable, Iterator
 from fractions import Fraction
@@ -41,6 +42,56 @@ def decode_video_frames_by_indices(
 def compute_video_statistics(video_file: str | pathlib.Path) -> VideoStatistics:
     with VideoReader(video_file) as video_reader:
         return video_reader.compute_statistics()
+
+
+def merge_video_statistics_list(video_statistics_list: Iterable[VideoStatistics]) -> VideoStatistics:
+    video_statistics_list = list(video_statistics_list)
+    if len(video_statistics_list) == 0:
+        msg = "Provide at least one video statistics."
+        raise ValueError(msg)
+    first_video_statistics = video_statistics_list[0]
+    if len(video_statistics_list) == 1:
+        return first_video_statistics
+
+    total_sample_size = sum(el.sample_size for el in video_statistics_list)
+    total_min = []
+    for i in range(len(first_video_statistics.min)):
+        min_scalar = min(el.min[i] for el in video_statistics_list)
+        total_min.append(min_scalar)
+    total_min = tuple(total_min)
+
+    total_max = []
+    for i in range(len(first_video_statistics.max)):
+        max_scalar = max(el.max[i] for el in video_statistics_list)
+        total_max.append(max_scalar)
+    total_max = tuple(total_max)
+
+    total_mean = []
+    for i in range(len(first_video_statistics.mean)):
+        mean_scalar = sum(el.sample_size * el.mean[i] for el in video_statistics_list) / total_sample_size
+        total_mean.append(mean_scalar)
+    total_mean = tuple(total_mean)
+
+    total_std = []
+    for i in range(len(first_video_statistics.std)):
+        square_scalar = 0
+        for el in video_statistics_list:
+            square_scalar += (el.sample_size - 1) * (el.std[i] ** 2)
+            square_scalar += el.sample_size * (el.mean[i] ** 2)
+        square_scalar /= total_sample_size
+
+        var_scalar = (square_scalar - total_mean[i] ** 2) * (total_sample_size / (total_sample_size - 1))
+        std_scalar = math.sqrt(max(0, var_scalar))
+        total_std.append(std_scalar)
+    total_std = tuple(total_std)
+
+    return VideoStatistics(
+        sample_size=total_sample_size,
+        min=total_min,
+        max=total_max,
+        mean=total_mean,
+        std=total_std,
+    )
 
 
 def remux_video_into_mp4(

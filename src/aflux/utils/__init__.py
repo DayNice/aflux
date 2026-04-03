@@ -27,6 +27,7 @@ from ._video_utils import (
     get_video_frame_infos,
     get_video_keyframe_infos,
     get_video_stream_info,
+    merge_video_statistics_list,
     remux_video_into_mp4,
 )
 
@@ -50,6 +51,7 @@ __all__ = [
     "get_video_keyframe_infos",
     "get_video_stream_info",
     "iter_batch",
+    "merge_video_statistics_list",
     "remux_video_into_mp4",
     "run_batch",
 ]

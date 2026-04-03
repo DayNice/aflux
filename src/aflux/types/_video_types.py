@@ -28,7 +28,7 @@ class VideoFrameInfo(BaseModel):
 class VideoStatistics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    sample_size: int
+    sample_size: PositiveInt
     min: tuple[float, float, float]
     max: tuple[float, float, float]
     mean: tuple[float, float, float]
