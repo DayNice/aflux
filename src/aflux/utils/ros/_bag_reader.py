@@ -13,7 +13,7 @@ from aflux.types.ros import TopicInfo
 
 from ._message_node import (
     StructNode,
-    parse_msgtype_into_node,
+    parse_message_type_into_node,
 )
 from ._message_polars import convert_message_node_into_polars_dtype
 
@@ -48,7 +48,7 @@ class BagReader:
 
     def get_message_node(self, topic: str) -> StructNode:
         topic_info = self.topic_info_map[topic]
-        return parse_msgtype_into_node(self._reader.typestore, topic_info.message_type)
+        return parse_message_type_into_node(self._reader.typestore, topic_info.message_type)
 
     def get_raw_bytes(self, topic: str) -> Iterator[tuple[int, str, bytes]]:
         connections = self._reader.topics[topic].connections

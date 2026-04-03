@@ -145,13 +145,13 @@ class ListNode(BaseNode):
 type MessageNode = Union[LeafNode, StructNode, ArrayNode, ListNode]
 
 
-def parse_msgtype_into_node(typestore: Typestore, msgtype: str) -> StructNode:
-    msgdef = typestore.get_msgdef(msgtype)
+def parse_message_type_into_node(typestore: Typestore, message_type: str) -> StructNode:
+    msgdef = typestore.get_msgdef(message_type)
     field_node_map: dict[str, MessageNode] = {}
     for field_name, field_value in msgdef.fields:
         field_node = parse_field_value_into_node(typestore, field_value)
         field_node_map[field_name] = field_node
-    return StructNode(dtype=msgtype, field_node_map=field_node_map)
+    return StructNode(dtype=message_type, field_node_map=field_node_map)
 
 
 def parse_field_value_into_node(typestore: Typestore, field_value: FieldDesc) -> MessageNode:
@@ -159,18 +159,18 @@ def parse_field_value_into_node(typestore: Typestore, field_value: FieldDesc) ->
         case (Nodetype.BASE, (dtype, max_length)):
             return LeafNode(dtype, max_length)
         case (Nodetype.NAME, dtype):
-            return parse_msgtype_into_node(typestore, dtype)
+            return parse_message_type_into_node(typestore, dtype)
         case (Nodetype.ARRAY, ((Nodetype.BASE, (dtype, max_length)), size)):
             item_node = LeafNode(dtype, max_length)
             return ArrayNode(item_node, size)
         case (Nodetype.ARRAY, ((Nodetype.NAME, dtype), size)):
-            item_node = parse_msgtype_into_node(typestore, dtype)
+            item_node = parse_message_type_into_node(typestore, dtype)
             return ArrayNode(item_node, size)
         case (Nodetype.SEQUENCE, ((Nodetype.BASE, (dtype, max_length)), max_size)):
             item_node = LeafNode(dtype, max_length)
             return ListNode(item_node, max_size)
         case (Nodetype.SEQUENCE, ((Nodetype.NAME, dtype), max_size)):
-            item_node = parse_msgtype_into_node(typestore, dtype)
+            item_node = parse_message_type_into_node(typestore, dtype)
             return ListNode(item_node, max_size)
         case _:
             raise ValueError(f"Unexpected field value: {field_value!r}")

@@ -8,7 +8,7 @@ from aflux.utils.ros import (
     ListNode,
     StructNode,
     parse_field_value_into_node,
-    parse_msgtype_into_node,
+    parse_message_type_into_node,
 )
 
 
@@ -81,7 +81,7 @@ class TestParsing:
 
     class TestParseMsgtype:
         def test_struct_node_creation(self, mock_typestore) -> None:
-            node = parse_msgtype_into_node(mock_typestore, "geometry_msgs/msg/Point")
+            node = parse_message_type_into_node(mock_typestore, "geometry_msgs/msg/Point")
             assert isinstance(node, StructNode)
             assert node.dtype == "geometry_msgs/msg/Point"
             assert set(node.field_node_map.keys()) == {"x", "y", "z"}
