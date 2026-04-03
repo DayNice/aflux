@@ -2,7 +2,6 @@ import pytest
 from pytest_mock import MockerFixture
 from rosbags.interfaces import Nodetype
 
-from aflux.utils import AttrKey, ItemKey, IterKey, PickKey
 from aflux.utils.ros import (
     ArrayNode,
     LeafNode,
@@ -19,80 +18,20 @@ class TestNodes:
             assert str(LeafNode("float64", 0)) == "float64"
             assert str(LeafNode("string", 10)) == "string<=10"
 
-        def test_transition_raises(self) -> None:
-            node = LeafNode("float64")
-            with pytest.raises(ValueError, match="Invalid"):
-                node.transition(AttrKey("x"))
-            with pytest.raises(ValueError, match="Invalid"):
-                node.transition(PickKey(["x", "y"]))
-
     class TestStructNode:
         def test_str(self) -> None:
             node = StructNode("geometry_msgs/msg/Point", {"x": LeafNode("float64")})
             assert str(node) == "geometry_msgs/msg/Point"
-
-        def test_transition_attr_success(self) -> None:
-            leaf_x = LeafNode("float64")
-            node = StructNode("geometry_msgs/msg/Point", {"x": leaf_x})
-            assert node.transition(AttrKey("x")) is leaf_x
-
-        def test_transition_attr_missing(self) -> None:
-            node = StructNode("geometry_msgs/msg/Point", {"x": LeafNode("float64")})
-            with pytest.raises(ValueError, match="attribute does not exist"):
-                node.transition(AttrKey("y"))
-
-        def test_transition_item_raises(self) -> None:
-            node = StructNode("geometry_msgs/msg/Point", {"x": LeafNode("float64")})
-            with pytest.raises(ValueError, match="Invalid"):
-                node.transition(ItemKey(0))
-
-        def test_transition_pick_success(self) -> None:
-            leaf_x = LeafNode("float64")
-            leaf_y = LeafNode("float64")
-            node = StructNode("geometry_msgs/msg/Point", {"x": leaf_x, "y": leaf_y})
-            assert node.transition(PickKey(["x", "y"])) is leaf_x
-
-        def test_transition_pick_missing(self) -> None:
-            node = StructNode("geometry_msgs/msg/Point", {"x": LeafNode("float64")})
-            with pytest.raises(ValueError, match="attribute does not exist"):
-                node.transition(PickKey(["x", "y"]))
-
-        def test_transition_pick_heterogeneous(self) -> None:
-            node = StructNode("test_msgs/msg/Mixed", {"a": LeafNode("float64"), "b": LeafNode("int32")})
-            with pytest.raises(ValueError, match="same type"):
-                node.transition(PickKey(["a", "b"]))
 
     class TestArrayNode:
         def test_str(self) -> None:
             node = ArrayNode(LeafNode("float64"), 3)
             assert str(node) == "float64[3]"
 
-        def test_transition_item_success(self) -> None:
-            item_node = LeafNode("float64")
-            node = ArrayNode(item_node, 3)
-            assert node.transition(ItemKey(0)) is item_node
-            assert node.transition(IterKey()) is item_node
-
-        def test_transition_attr_raises(self) -> None:
-            node = ArrayNode(LeafNode("float64"), 3)
-            with pytest.raises(ValueError, match="Invalid"):
-                node.transition(AttrKey("x"))
-
     class TestListNode:
         def test_str(self) -> None:
             assert str(ListNode(LeafNode("float64"))) == "float64[]"
             assert str(ListNode(LeafNode("float64"), 10)) == "float64[<=10]"
-
-        def test_transition_item_success(self) -> None:
-            item_node = LeafNode("float64")
-            node = ListNode(item_node)
-            assert node.transition(ItemKey(0)) is item_node
-            assert node.transition(IterKey()) is item_node
-
-        def test_transition_attr_raises(self) -> None:
-            node = ListNode(LeafNode("float64"))
-            with pytest.raises(ValueError, match="list"):
-                node.transition(AttrKey("x"))
 
 
 class TestParsing:
@@ -177,21 +116,3 @@ class TestDumpMessage:
 
         arr = np.array([1.0, 2.0])
         assert node.dump_message(arr) is arr
-
-    def test_dump_message_with_key(self) -> None:
-        from types import SimpleNamespace
-
-        node = StructNode(
-            "MyMsg", {"pts": ListNode(StructNode("Point", {"x": LeafNode("float64"), "y": LeafNode("float64")}))}
-        )
-
-        msg = SimpleNamespace(pts=[SimpleNamespace(x=1.0, y=2.0), SimpleNamespace(x=3.0, y=4.0)])
-
-        # Test basic attribute key
-        assert node.dump_message_with_key(msg, "pts") == [{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}]
-
-        # Test PickKey and IterKey
-        assert node.dump_message_with_key(msg, "pts[].{x,y}") == [[1.0, 2.0], [3.0, 4.0]]
-
-        # Test IterKey and AttrKey
-        assert node.dump_message_with_key(msg, "pts[].x") == [1.0, 3.0]

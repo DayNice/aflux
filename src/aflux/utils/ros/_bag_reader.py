@@ -1,6 +1,6 @@
 import functools
 import pathlib
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from types import TracebackType
 from typing import Any, Self
 
@@ -10,12 +10,10 @@ from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.store import Typestore
 
 from aflux.types.ros import TopicInfo
-from aflux.utils import Key
 
 from ._message_node import (
     StructNode,
     parse_msgtype_into_node,
-    validate_message_field_getter,
 )
 from ._message_polars import convert_message_node_into_polars_dtype
 
@@ -82,17 +80,6 @@ class BagReader:
             records.append(record)
 
         return pl.from_dicts(records, schema=schema)
-
-    def get_message_fields(self, topic: str, keys: Iterable[str | Key]) -> Iterator[tuple[int, list[Any]]]:
-        topic_info = self.topic_info_map[topic]
-        getters = [validate_message_field_getter(self._reader.typestore, topic_info.message_type, key) for key in keys]
-        for timestamp, message in self.get_messages(topic):
-            yield timestamp, [el(message) for el in getters]
-
-    def dump_message_fields(self, topic: str, keys: Iterable[str | Key]) -> Iterator[tuple[int, list[Any]]]:
-        node = self.get_message_node(topic)
-        for timestamp, message in self.get_messages(topic):
-            yield timestamp, [node.dump_message_with_key(message, key) for key in keys]
 
     def close(self) -> None:
         self._reader.close()

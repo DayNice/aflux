@@ -1,9 +1,7 @@
-from typing import Literal, assert_never
+from typing import assert_never
 
 import polars as pl
 from rosbags.interfaces.typing import Basename
-
-from aflux.utils import IterKey, Key, PickKey
 
 from ._message_node import (
     ArrayNode,
@@ -57,32 +55,3 @@ def convert_message_node_into_polars_dtype(node: MessageNode) -> pl.DataType:
             return pl.List(inner_dtype)
         case _:
             assert_never(node)
-
-
-def convert_message_node_with_key_into_polars_dtype(
-    node: MessageNode,
-    key: str | Key,
-) -> pl.DataType:
-    key = Key(key)
-    wrapper_infos: list[tuple[Literal["array", "list"], int | None]] = []
-    for part in key.parts:
-        match part, node:
-            case IterKey(), ArrayNode(_, size):
-                wrapper_infos.append(("array", size))
-            case IterKey(), ListNode():
-                wrapper_infos.append(("list", None))
-            case PickKey(names), StructNode():
-                wrapper_infos.append(("array", len(names)))
-        node = node.transition(part)
-
-    dtype = convert_message_node_into_polars_dtype(node)
-    for wrapper, size in reversed(wrapper_infos):
-        match wrapper:
-            case "array":
-                assert size is not None
-                dtype = pl.Array(dtype, size)
-            case "list":
-                dtype = pl.List(dtype)
-            case _:
-                assert_never(wrapper)
-    return dtype

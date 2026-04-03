@@ -5,8 +5,6 @@ import numpy as np
 from rosbags.interfaces import Nodetype, Typestore
 from rosbags.interfaces.typing import Basename, FieldDesc
 
-from aflux.utils import AttrKey, ItemKey, IterKey, Key, PickKey
-
 
 class BaseNode(metaclass=ABCMeta):
     dtype: str
@@ -26,17 +24,7 @@ class BaseNode(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def transition(self, key: AttrKey | ItemKey | IterKey | PickKey) -> "BaseNode": ...
-
-    @abstractmethod
     def dump_message(self, message: Any) -> Any: ...
-
-    def dump_message_with_key(self, message: Any, key: str | Key) -> Any:
-        key = Key(key)
-        node = self
-        for part in key.parts:
-            node = node.transition(part)
-        return node.dump_message(key(message))
 
 
 class LeafNode(BaseNode):
@@ -61,11 +49,6 @@ class LeafNode(BaseNode):
         return f"{self.dtype}"
 
     @override
-    def transition(self, key: AttrKey | ItemKey | IterKey | PickKey) -> "MessageNode":
-        msg = f"Invalid attribute or item access against a leaf: {str(self)!r} {str(key)!r}"
-        raise ValueError(msg)
-
-    @override
     def dump_message(self, message: Any) -> Any:
         return message
 
@@ -88,37 +71,6 @@ class StructNode(BaseNode):
     @override
     def __str__(self) -> str:
         return self.dtype
-
-    @override
-    def transition(self, key: AttrKey | ItemKey | IterKey | PickKey) -> "MessageNode":
-        if isinstance(key, AttrKey):
-            field_node = self.field_node_map.get(key.name)
-            if field_node is None:
-                msg = f"Requested attribute does not exist: {str(self)!r} {str(key)!r}"
-                raise ValueError(msg)
-            return field_node
-
-        if isinstance(key, PickKey):
-            first_node = self.field_node_map.get(key.names[0])
-            if first_node is None:
-                msg = f"Requested attribute does not exist: {str(self)!r} {key.names[0]!r} in {str(key)!r}"
-                raise ValueError(msg)
-
-            for name in key.names[1:]:
-                field_node = self.field_node_map.get(name)
-                if field_node is None:
-                    msg = f"Requested attribute does not exist: {str(self)!r} {name!r} in {str(key)!r}"
-                    raise ValueError(msg)
-                if field_node != first_node:
-                    msg = (
-                        "PickKey requires all requested attributes to have the same type."
-                        f"Mismatch in {str(self)!r}: {str(first_node)!r} vs {str(field_node)!r}",
-                    )
-                    raise ValueError(msg)
-            return first_node
-
-        msg = f"Invalid item access against a struct: {str(self)!r} {str(key)!r}"
-        raise ValueError(msg)
 
     @override
     def dump_message(self, message: Any) -> dict[str, Any]:
@@ -152,13 +104,6 @@ class ArrayNode(BaseNode):
         return self.dtype
 
     @override
-    def transition(self, key: AttrKey | ItemKey | IterKey | PickKey) -> "MessageNode":
-        if isinstance(key, (ItemKey, IterKey)):
-            return self.item_node
-        msg = f"Invalid attribute access against an array: {str(self)!r} {str(key)!r}"
-        raise ValueError(msg)
-
-    @override
     def dump_message(self, message: Any) -> np.ndarray | list[Any]:
         if isinstance(message, np.ndarray):
             return message
@@ -189,13 +134,6 @@ class ListNode(BaseNode):
         if self.max_size != 0:
             return f"{self.item_node.dtype}[<={self.max_size}]"
         return f"{self.item_node.dtype}[]"
-
-    @override
-    def transition(self, key: AttrKey | ItemKey | IterKey | PickKey) -> "MessageNode":
-        if isinstance(key, (ItemKey, IterKey)):
-            return self.item_node
-        msg = f"Invalid attribute access against a list: {str(self)!r} {str(key)!r}"
-        raise ValueError(msg)
 
     @override
     def dump_message(self, message: Any) -> list[Any]:
@@ -236,15 +174,3 @@ def parse_field_value_into_node(typestore: Typestore, field_value: FieldDesc) ->
             return ListNode(item_node, max_size)
         case _:
             raise ValueError(f"Unexpected field value: {field_value!r}")
-
-
-def validate_message_field_getter(
-    typestore: Typestore,
-    msgtype: str,
-    key: str | Key,
-) -> Key:
-    key = Key(key)
-    node: MessageNode = parse_msgtype_into_node(typestore, msgtype)
-    for part in key.parts:
-        node = node.transition(part)
-    return key
