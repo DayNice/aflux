@@ -1,6 +1,7 @@
 import datetime
 import pathlib
 import shutil
+from collections.abc import Iterator
 from typing import override
 
 from aflux.protocols.bucket import Bucket
@@ -40,6 +41,30 @@ class DirBucket(Bucket):
         size = file_stat.st_size
         last_modified = datetime.datetime.fromtimestamp(file_stat.st_mtime, datetime.UTC)
         return BucketFileMeta(path=remote_path, size=size, last_modified=last_modified)
+
+    @override
+    def get_file_metas(self, remote_prefix: str = "") -> Iterator[BucketFileMeta]:
+        search_dir = self._get_remote_file(remote_prefix)
+        if search_dir != self._root_dir and not search_dir.is_dir():
+            search_dir = search_dir.parent
+        if not search_dir.exists():
+            return
+
+        file_metas: list[BucketFileMeta] = []
+        for remote_file in search_dir.rglob("*"):
+            remote_path = remote_file.relative_to(self._root_dir).as_posix()
+            if not remote_file.is_file() or not remote_path.startswith(remote_prefix):
+                continue
+
+            file_stat = remote_file.stat()
+            size = file_stat.st_size
+            last_modified = datetime.datetime.fromtimestamp(file_stat.st_mtime, datetime.UTC)
+
+            file_meta = BucketFileMeta(path=remote_path, size=size, last_modified=last_modified)
+            file_metas.append(file_meta)
+        file_metas.sort(key=lambda el: el.path)
+
+        yield from file_metas
 
     @override
     def get_file(self, remote_path: str, *, refresh: bool = False) -> pathlib.Path:

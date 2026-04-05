@@ -3,6 +3,7 @@ import pathlib
 import shutil
 import tempfile
 import weakref
+from collections.abc import Iterator
 from types import TracebackType
 from typing import TYPE_CHECKING, Self, override
 
@@ -48,12 +49,12 @@ class S3Bucket(Bucket):
             raise ValueError(msg)
         return remote_file
 
-    def _get_bucket_key(self, remote_path: str) -> str:
+    def _get_bucket_path(self, remote_path: str) -> str:
         return f"{self._bucket_prefix}{remote_path}"
 
     @override
     def check_file_exists(self, remote_path: str) -> bool:
-        bucket_key = self._get_bucket_key(remote_path)
+        bucket_key = self._get_bucket_path(remote_path)
         try:
             self._s3_client.head_object(Bucket=self._bucket_name, Key=bucket_key)
             return True
@@ -64,11 +65,24 @@ class S3Bucket(Bucket):
 
     @override
     def get_file_meta(self, remote_path: str) -> BucketFileMeta:
-        bucket_key = self._get_bucket_key(remote_path)
+        bucket_key = self._get_bucket_path(remote_path)
         resp = self._s3_client.head_object(Bucket=self._bucket_name, Key=bucket_key)
         last_modified = resp["LastModified"]
         size = resp["ContentLength"]
         return BucketFileMeta(path=remote_path, size=size, last_modified=last_modified)
+
+    @override
+    def get_file_metas(self, remote_prefix: str = "") -> Iterator[BucketFileMeta]:
+        bucket_prefix = self._get_bucket_path(remote_prefix)
+        paginator = self._s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self._bucket_name, Prefix=bucket_prefix):
+            for obj in page.get("Contents", []):
+                file_meta = BucketFileMeta(
+                    path=obj["Key"].removeprefix(self._bucket_prefix),
+                    size=obj["Size"],
+                    last_modified=obj["LastModified"],
+                )
+                yield file_meta
 
     @override
     def get_file(self, remote_path: str, *, refresh: bool = False) -> pathlib.Path:
@@ -76,14 +90,14 @@ class S3Bucket(Bucket):
         if not refresh and remote_file.exists():
             return remote_file
         remote_file.parent.mkdir(parents=True, exist_ok=True)
-        bucket_key = self._get_bucket_key(remote_path)
+        bucket_key = self._get_bucket_path(remote_path)
         self._s3_client.download_file(self._bucket_name, bucket_key, str(remote_file))
         return remote_file
 
     @override
     def get_bytes(self, remote_path: str, *, refresh: bool = False) -> bytes:
         if refresh:
-            bucket_key = self._get_bucket_key(remote_path)
+            bucket_key = self._get_bucket_path(remote_path)
             buffer = io.BytesIO()
             self._s3_client.download_fileobj(self._bucket_name, bucket_key, buffer)
             return buffer.getvalue()
@@ -92,17 +106,17 @@ class S3Bucket(Bucket):
 
     @override
     def put_file(self, local_file: str | pathlib.Path, remote_path: str) -> None:
-        bucket_key = self._get_bucket_key(remote_path)
+        bucket_key = self._get_bucket_path(remote_path)
         self._s3_client.upload_file(str(local_file), self._bucket_name, bucket_key)
 
     @override
     def put_bytes(self, local_bytes: bytes, remote_path: str) -> None:
-        bucket_key = self._get_bucket_key(remote_path)
+        bucket_key = self._get_bucket_path(remote_path)
         self._s3_client.upload_fileobj(io.BytesIO(local_bytes), self._bucket_name, bucket_key)
 
     @override
     def delete_file(self, remote_path: str) -> None:
-        bucket_key = self._get_bucket_key(remote_path)
+        bucket_key = self._get_bucket_path(remote_path)
         self._s3_client.delete_object(Bucket=self._bucket_name, Key=bucket_key)
 
     def clear_temp_dir(self) -> None:
