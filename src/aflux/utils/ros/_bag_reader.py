@@ -69,7 +69,7 @@ class BagReader:
         schema = pl.Schema(
             {
                 "timestamp": pl.Int64,
-                topic: node.to_polars_dtype(),
+                topic: node.to_dataframe_dtype(),
             }
         )
 

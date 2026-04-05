@@ -1,4 +1,4 @@
-from ._polars_helper import (
+from ._dataframe_helper import (
     flatten_struct,
 )
 

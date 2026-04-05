@@ -7,7 +7,7 @@ from rosbags.interfaces import Nodetype, Typestore
 from rosbags.interfaces.typing import Basename, FieldDesc
 
 
-def _basename_to_polars_dtype(basename: Basename) -> pl.DataType:
+def _basename_to_dataframe_dtype(basename: Basename) -> pl.DataType:
     mapping: dict[Basename, pl.DataType] = {
         "bool": pl.Boolean(),
         "byte": pl.UInt8(),
@@ -53,7 +53,7 @@ class BaseNode(metaclass=ABCMeta):
     def dump_message(self, message: Any) -> Any: ...
 
     @abstractmethod
-    def to_polars_dtype(self) -> pl.DataType: ...
+    def to_dataframe_dtype(self) -> pl.DataType: ...
 
 
 class LeafNode(BaseNode):
@@ -82,8 +82,8 @@ class LeafNode(BaseNode):
         return message
 
     @override
-    def to_polars_dtype(self) -> pl.DataType:
-        return _basename_to_polars_dtype(self.dtype)
+    def to_dataframe_dtype(self) -> pl.DataType:
+        return _basename_to_dataframe_dtype(self.dtype)
 
 
 class StructNode(BaseNode):
@@ -113,10 +113,10 @@ class StructNode(BaseNode):
         }
 
     @override
-    def to_polars_dtype(self) -> pl.DataType:
+    def to_dataframe_dtype(self) -> pl.DataType:
         field_dtype_map: dict[str, pl.DataType] = {}
         for field_name, field_node in self.field_node_map.items():
-            field_dtype_map[field_name] = field_node.to_polars_dtype()
+            field_dtype_map[field_name] = field_node.to_dataframe_dtype()
         return pl.Struct(field_dtype_map)
 
 
@@ -150,8 +150,8 @@ class ArrayNode(BaseNode):
         return [self.item_node.dump_message(item) for item in message]
 
     @override
-    def to_polars_dtype(self) -> pl.DataType:
-        inner_dtype = self.item_node.to_polars_dtype()
+    def to_dataframe_dtype(self) -> pl.DataType:
+        inner_dtype = self.item_node.to_dataframe_dtype()
         return pl.Array(inner_dtype, shape=(self.size,))
 
 
@@ -187,8 +187,8 @@ class ListNode(BaseNode):
         return [self.item_node.dump_message(item) for item in message]
 
     @override
-    def to_polars_dtype(self) -> pl.DataType:
-        inner_dtype = self.item_node.to_polars_dtype()
+    def to_dataframe_dtype(self) -> pl.DataType:
+        inner_dtype = self.item_node.to_dataframe_dtype()
         return pl.List(inner_dtype)
 
 
