@@ -8,7 +8,7 @@ import rich.progress
 from cyclopts import App
 from rich.console import Console
 
-from aflux import utils
+from aflux.utils import video as video_utils
 
 from ..parameters import Indices, InputFile, OutputDir
 
@@ -18,7 +18,7 @@ app = App(help="Inspect a video.")
 @app.command
 def stream(video: InputFile) -> None:
     """Get video stream information."""
-    info = utils.get_video_stream_info(video)
+    info = video_utils.get_video_stream_info(video)
     print(info.model_dump_json())
 
 
@@ -26,9 +26,9 @@ def stream(video: InputFile) -> None:
 def frames(video: InputFile, *, keyframes_only: bool = False) -> None:
     """Get video frame informations."""
     if keyframes_only:
-        frame_infos = utils.get_video_keyframe_infos(video)
+        frame_infos = video_utils.get_video_keyframe_infos(video)
     else:
-        frame_infos = utils.get_video_frame_infos(video)
+        frame_infos = video_utils.get_video_frame_infos(video)
     for frame_info in frame_infos:
         print(frame_info.model_dump_json())
 
@@ -45,7 +45,7 @@ def frame_images(
     """Save frames at given indices as image files."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    iterator = zip(indices, utils.decode_video_frames(video_file, indices))
+    iterator = zip(indices, video_utils.decode_video_frames(video_file, indices))
     iterator = cast(Iterator[tuple[int, av.VideoFrame]], iterator)
     iterator = rich.progress.track(
         iterator,

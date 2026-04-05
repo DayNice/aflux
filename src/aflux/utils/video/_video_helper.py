@@ -11,7 +11,7 @@ import av.stream
 import av.video.reformatter
 import PIL.Image
 
-from aflux.types import VideoFrameInfo, VideoStatistics, VideoStreamInfo
+from aflux.types.video import VideoFrameInfo, VideoStatistics, VideoStreamInfo
 
 from ._video_reader import VideoReader
 

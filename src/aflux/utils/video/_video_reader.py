@@ -15,9 +15,8 @@ import av.video.reformatter
 import numpy as np
 import numpy.typing as npt
 
-from aflux.types import VideoFrameInfo, VideoStatistics, VideoStreamInfo
-
-from .. import _stats_utils
+from aflux import utils
+from aflux.types.video import VideoFrameInfo, VideoStatistics, VideoStreamInfo
 
 
 class VideoReader:
@@ -285,7 +284,7 @@ class VideoReader:
         return next(self.decode_frames((frame_index,)))
 
     def compute_statistics(self) -> VideoStatistics:
-        sample_indices = _stats_utils.get_sample_indices(self._stream_info.num_frames)
+        sample_indices = utils.get_sample_indices(self._stream_info.num_frames)
         frames = self.decode_frames(sample_indices)
 
         arr = self.convert_frames_into_rgb_numpy(frames)
