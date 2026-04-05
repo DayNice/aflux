@@ -22,7 +22,7 @@ from ._stats_utils import (
 from ._video_utils import (
     VideoReader,
     compute_video_statistics,
-    decode_video_frames_by_indices,
+    decode_video_frames,
     encode_images_into_mp4,
     get_video_frame_infos,
     get_video_keyframe_infos,
@@ -43,7 +43,7 @@ __all__ = [
     "aiter_batch",
     "arun_batch",
     "compute_video_statistics",
-    "decode_video_frames_by_indices",
+    "decode_video_frames",
     "encode_images_into_mp4",
     "get_sample_indices",
     "get_sample_size",

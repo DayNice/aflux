@@ -8,7 +8,7 @@ import rich.progress
 from cyclopts import App
 from rich.console import Console
 
-from aflux.utils import decode_video_frames_by_indices
+from aflux.utils import decode_video_frames
 
 from ..parameters import Indices, OutputDir, VideoFile
 from .info import app as info_app
@@ -29,7 +29,7 @@ def frames(
     """Save frames at given indices as image files."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    iterator = zip(indices, decode_video_frames_by_indices(video_file, indices))
+    iterator = zip(indices, decode_video_frames(video_file, indices))
     iterator = cast(Iterator[tuple[int, av.VideoFrame]], iterator)
     iterator = rich.progress.track(
         iterator,

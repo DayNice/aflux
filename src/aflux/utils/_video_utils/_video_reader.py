@@ -177,7 +177,7 @@ class VideoReader:
         frame_infos.sort(key=lambda el: el.timestamp)
         return frame_infos
 
-    def get_frame_info_by_index(self, frame_index: int) -> VideoFrameInfo:
+    def get_frame_info(self, frame_index: int) -> VideoFrameInfo:
         estimated_frame_pts = self._estimate_frame_pts_by_index(frame_index)
 
         pts_duration_per_frame = 1 / self._frames_per_time_base
@@ -216,7 +216,7 @@ class VideoReader:
         assert frame_info.is_keyframe, "Packet should belong to a keyframe."
         return frame_info
 
-    def decode_frames_by_indices(self, frame_indices: Iterable[int]) -> Iterator[av.VideoFrame]:
+    def decode_frames(self, frame_indices: Iterable[int]) -> Iterator[av.VideoFrame]:
         frame_indices = list(frame_indices)
         if len(frame_indices) == 0:
             return
@@ -240,7 +240,7 @@ class VideoReader:
         keyframe_map: dict[VideoFrameInfo, list[_FrameData]] = {}
         keyframe_reverse_map: dict[int, VideoFrameInfo] = {}
         for frame_index in sorted_frame_indices:
-            frame_info = self.get_frame_info_by_index(frame_index)
+            frame_info = self.get_frame_info(frame_index)
             frame_data: _FrameData = {"frame_index": frame_index, "frame_info": frame_info}
             keyframe_info = self._search_keyframe_info_by_pts(frame_info.pts)
 
@@ -278,7 +278,7 @@ class VideoReader:
 
     def compute_statistics(self) -> VideoStatistics:
         sample_indices = _stats_utils.get_sample_indices(self._stream_info.num_frames)
-        frames = self.decode_frames_by_indices(sample_indices)
+        frames = self.decode_frames(sample_indices)
 
         arr = self.convert_frames_into_rgb_numpy(frames)
         assert len(arr.shape) == 4 and arr.shape[3] == 3, "RGB array should be of shape (N, H, W, 3)."

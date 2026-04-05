@@ -31,12 +31,12 @@ def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameI
         return video_reader.get_keyframe_infos()
 
 
-def decode_video_frames_by_indices(
+def decode_video_frames(
     video_file: str | pathlib.Path,
     frame_indices: Iterable[int],
 ) -> Iterator[av.VideoFrame]:
     with VideoReader(video_file) as video_reader:
-        yield from video_reader.decode_frames_by_indices(frame_indices)
+        yield from video_reader.decode_frames(frame_indices)
 
 
 def compute_video_statistics(video_file: str | pathlib.Path) -> VideoStatistics:
