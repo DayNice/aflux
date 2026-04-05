@@ -4,10 +4,6 @@ from ._batch_utils import (
     iter_batch,
     run_batch,
 )
-from ._bucket_utils import (
-    DirBucket,
-    S3Bucket,
-)
 from ._key_utils import (
     AttrKey,
     ItemKey,
@@ -22,12 +18,10 @@ from ._stats_utils import (
 
 __all__ = [
     "AttrKey",
-    "DirBucket",
     "ItemKey",
     "IterKey",
     "Key",
     "PickKey",
-    "S3Bucket",
     "aiter_batch",
     "arun_batch",
     "get_sample_indices",

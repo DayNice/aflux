@@ -1,13 +1,8 @@
 import pathlib
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-from aflux.types import BucketFileMeta
-
-if TYPE_CHECKING:
-    from types_boto3_s3 import S3Client
-else:
-    S3Client = object
+from aflux.types.bucket import BucketFileMeta
 
 
 @runtime_checkable
