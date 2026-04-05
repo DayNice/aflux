@@ -24,11 +24,6 @@ OutputFile = Annotated[
     Parameter(validator=validators.Path(dir_okay=False)),
 ]
 
-VideoFile = Annotated[
-    pathlib.Path,
-    Parameter(validator=validators.Path(exists=True, dir_okay=False)),
-]
-
 
 def _parse_indices[T](type_: type[T], tokens: Sequence[Token]) -> list[int]:
     """Parse indices given as comma-separated integers and/or start:stop[:step] ranges.
