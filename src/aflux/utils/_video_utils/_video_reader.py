@@ -216,7 +216,12 @@ class VideoReader:
         assert frame_info.is_keyframe, "Packet should belong to a keyframe."
         return frame_info
 
-    def decode_frames(self, frame_indices: Iterable[int]) -> Iterator[av.VideoFrame]:
+    def decode_frames(self, frame_indices: Iterable[int] | None = None) -> Iterator[av.VideoFrame]:
+        if frame_indices is None:
+            assert self._seek_pts(0)
+            yield from self._decode_frames()
+            return
+
         frame_indices = list(frame_indices)
         if len(frame_indices) == 0:
             return
@@ -275,6 +280,9 @@ class VideoReader:
             assert len(frame_pts_map) == 0, "Target pts should exist in video."
 
             yield found_frame_map.pop(frame_index)
+
+    def decode_frame(self, frame_index: int) -> av.VideoFrame:
+        return next(self.decode_frames((frame_index,)))
 
     def compute_statistics(self) -> VideoStatistics:
         sample_indices = _stats_utils.get_sample_indices(self._stream_info.num_frames)
