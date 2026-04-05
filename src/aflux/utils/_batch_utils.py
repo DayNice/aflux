@@ -14,6 +14,7 @@ from typing import Any, cast
 def _sync_indexed_wrapper[T, **P](
     index: int,
     func: Callable[P, T],
+    /,
     *args: P.args,
     **kwargs: P.kwargs,
 ) -> tuple[int, T]:
@@ -61,6 +62,7 @@ def run_batch[T](
 async def _async_indexed_wrapper[T, **P](
     index: int,
     func: Callable[P, Awaitable[T]],
+    /,
     *args: P.args,
     **kwargs: P.kwargs,
 ) -> tuple[int, T]:
@@ -88,7 +90,7 @@ async def aiter_batch[T](
         pending.add(task)
 
     for coro in asyncio.as_completed(pending):
-        yield coro.result()
+        yield await coro
 
 
 async def arun_batch[T](
