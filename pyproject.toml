@@ -69,3 +69,25 @@ extend-select = ["I", "RUF022"]
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.coverage.run]
+source_pkgs = ["aflux"]
+branch = true
+parallel = true
+
+[tool.coverage.paths]
+aflux = ["src/aflux", "*/aflux/src/aflux"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "no cov",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "^\\s*@(abc\\.)?abstractmethod",
+    "raise NotImplementedError",
+    "def __repr__",
+    "def __str__",
+]
+
+[tool.pytest.ini_options]
+addopts = "--cov --cov-report=term-missing --cov-report=xml"
