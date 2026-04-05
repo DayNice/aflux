@@ -3,13 +3,12 @@ import pytest
 from pytest_mock import MockerFixture
 from rosbags.interfaces import Nodetype
 
+from aflux.utils import ros as ros_utils
 from aflux.utils.ros import (
     ArrayNode,
     LeafNode,
     ListNode,
     StructNode,
-    parse_field_value_into_node,
-    parse_message_type_into_node,
 )
 
 
@@ -57,32 +56,36 @@ class TestParsing:
 
     class TestParseFieldValue:
         def test_base_node(self, mock_typestore) -> None:
-            node = parse_field_value_into_node(mock_typestore, (Nodetype.BASE, ("float64", 0)))
+            node = ros_utils.parse_field_value_into_node(mock_typestore, (Nodetype.BASE, ("float64", 0)))
             assert isinstance(node, LeafNode)
             assert node.dtype == "float64"
             assert node.max_length == 0
 
         def test_name_node(self, mock_typestore) -> None:
-            node = parse_field_value_into_node(mock_typestore, (Nodetype.NAME, "geometry_msgs/msg/Point"))
+            node = ros_utils.parse_field_value_into_node(mock_typestore, (Nodetype.NAME, "geometry_msgs/msg/Point"))
             assert isinstance(node, StructNode)
             assert node.dtype == "geometry_msgs/msg/Point"
             assert "x" in node.field_node_map
 
         def test_array_node(self, mock_typestore) -> None:
-            node = parse_field_value_into_node(mock_typestore, (Nodetype.ARRAY, ((Nodetype.BASE, ("float64", 0)), 3)))
+            node = ros_utils.parse_field_value_into_node(
+                mock_typestore, (Nodetype.ARRAY, ((Nodetype.BASE, ("float64", 0)), 3))
+            )
             assert isinstance(node, ArrayNode)
             assert node.item_node.dtype == "float64"
             assert node.size == 3
 
         def test_sequence_node(self, mock_typestore) -> None:
-            node = parse_field_value_into_node(mock_typestore, (Nodetype.SEQUENCE, ((Nodetype.BASE, ("uint8", 0)), 0)))
+            node = ros_utils.parse_field_value_into_node(
+                mock_typestore, (Nodetype.SEQUENCE, ((Nodetype.BASE, ("uint8", 0)), 0))
+            )
             assert isinstance(node, ListNode)
             assert node.item_node.dtype == "uint8"
             assert node.max_size == 0
 
     class TestParseMsgtype:
         def test_struct_node_creation(self, mock_typestore) -> None:
-            node = parse_message_type_into_node(mock_typestore, "geometry_msgs/msg/Point")
+            node = ros_utils.parse_message_type_into_node(mock_typestore, "geometry_msgs/msg/Point")
             assert isinstance(node, StructNode)
             assert node.dtype == "geometry_msgs/msg/Point"
             assert set(node.field_node_map.keys()) == {"x", "y", "z"}

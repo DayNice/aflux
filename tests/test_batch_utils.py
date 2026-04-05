@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from aflux.utils._batch_utils import arun_batch, run_batch
+from aflux import utils
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ class TestSyncBatch:
         ]
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            results = run_batch(executor, slow_task, kwargs_list, batch_size=4)
+            results = utils.run_batch(executor, slow_task, kwargs_list, batch_size=4)
 
         assert results == [0, 1, 2, 3]
 
@@ -46,6 +46,6 @@ class TestAsyncBatch:
         ]
 
         async with asyncio.TaskGroup() as task_group:
-            results = await arun_batch(task_group, slow_task, kwargs_list, batch_size=4)
+            results = await utils.arun_batch(task_group, slow_task, kwargs_list, batch_size=4)
 
         assert results == [0, 1, 2, 3]
