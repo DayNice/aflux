@@ -2,8 +2,10 @@ import io
 import pathlib
 import shutil
 import tempfile
+import threading
 import weakref
 from collections.abc import Iterator
+from concurrent.futures import Future
 from types import TracebackType
 from typing import TYPE_CHECKING, Self, override
 
@@ -41,6 +43,9 @@ class S3Bucket(Bucket):
         if s3_client is None:
             s3_client = boto3.client("s3")
         self._s3_client = s3_client
+
+        self._registry_lock = threading.Lock()
+        self._active_download_map: dict[str, Future] = {}
 
     def _get_remote_file(self, remote_path: str) -> pathlib.Path:
         remote_file = (self._temp_dir / remote_path).resolve()
@@ -86,13 +91,36 @@ class S3Bucket(Bucket):
 
     @override
     def get_file(self, remote_path: str, *, refresh: bool = False) -> pathlib.Path:
+        # called first to check `remote_path` is valid
         remote_file = self._get_remote_file(remote_path)
-        if not refresh and remote_file.exists():
+
+        with self._registry_lock:
+            if remote_path not in self._active_download_map:
+                if not refresh and remote_file.exists():
+                    return remote_file
+                future = Future()
+                self._active_download_map[remote_path] = future
+                is_downloader = True
+            else:
+                future = self._active_download_map[remote_path]
+                is_downloader = False
+
+        if not is_downloader:
+            return future.result()
+
+        try:
+            bucket_key = self._get_bucket_path(remote_path)
+            remote_file.parent.mkdir(parents=True, exist_ok=True)
+            self._s3_client.download_file(self._bucket_name, bucket_key, str(remote_file))
+
+            future.set_result(remote_file)
             return remote_file
-        remote_file.parent.mkdir(parents=True, exist_ok=True)
-        bucket_key = self._get_bucket_path(remote_path)
-        self._s3_client.download_file(self._bucket_name, bucket_key, str(remote_file))
-        return remote_file
+        except BaseException as e:
+            future.set_exception(e)
+            raise
+        finally:
+            with self._registry_lock:
+                self._active_download_map.pop(remote_path, None)
 
     @override
     def get_bytes(self, remote_path: str, *, refresh: bool = False) -> bytes:
