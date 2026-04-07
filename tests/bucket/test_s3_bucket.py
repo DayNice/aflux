@@ -1,8 +1,13 @@
+import concurrent.futures
 import pathlib
+import threading
+import time
+from typing import cast
 
 import boto3
 import pytest
 from moto import mock_aws
+from pytest_mock import MockerFixture
 
 from aflux.utils.bucket import S3Bucket
 
@@ -50,3 +55,59 @@ class TestS3Bucket:
 
         assert tmp_path.exists()
         assert not any(tmp_path.iterdir())
+
+    def test_concurrent_downloads_success(self, s3_client, mocker: MockerFixture) -> None:
+        download_started = threading.Event()
+        allow_download = threading.Event()
+        old_download_file = s3_client.download_file
+
+        def mock_download_file(*args, **kwargs):
+            download_started.set()
+            allow_download.wait()
+            return old_download_file(*args, **kwargs)
+
+        mocker.patch.object(s3_client, "download_file", side_effect=mock_download_file)
+
+        bucket = S3Bucket("test-bucket", s3_client=s3_client)
+        remote_path = "concurrent.txt"
+        local_bytes = b"concurrent data"
+        bucket.put_bytes(local_bytes, remote_path)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(bucket.get_file, remote_path) for _ in range(5)]
+
+            download_started.wait()
+            time.sleep(0.05)  # ensure all threads enter wait state
+            allow_download.set()
+
+            for future in futures:
+                assert future.result().read_bytes() == local_bytes
+        assert cast(mocker.MagicMock, s3_client.download_file).call_count == 1
+
+    def test_concurrent_downloads_exception(self, s3_client, mocker: MockerFixture) -> None:
+        download_started = threading.Event()
+        allow_download = threading.Event()
+        error = Exception("Network failure.")
+
+        def mock_download_file(*args, **kwargs):
+            download_started.set()
+            allow_download.wait()
+            raise error
+
+        mocker.patch.object(s3_client, "download_file", side_effect=mock_download_file)
+
+        bucket = S3Bucket("test-bucket", s3_client=s3_client)
+        remote_path = "error.txt"
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(bucket.get_file, remote_path) for _ in range(5)]
+
+            download_started.wait()
+            time.sleep(0.05)  # ensure all threads enter wait state
+            allow_download.set()
+
+            for future in futures:
+                with pytest.raises(Exception) as exc_info:
+                    future.result()
+                assert exc_info.value is error
+        assert cast(mocker.MagicMock, s3_client.download_file).call_count == 1
