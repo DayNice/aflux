@@ -1,3 +1,17 @@
+import uuid
+
+import uuid_utils
+import uuid_utils.compat
+
+
+def get_uuid_v7() -> uuid.UUID:
+    return uuid_utils.compat.uuid7()
+
+
+def get_uuid_v7_timestamp_millis(uuid_v7: uuid.UUID) -> int:
+    return uuid_utils.UUID(bytes=uuid_v7.bytes).timestamp
+
+
 def get_sample_size(population_size: int) -> int:
     """Calculates the recommended sample size to obtain reliable proxies for Mean, Std Dev, and Min/Max.
 

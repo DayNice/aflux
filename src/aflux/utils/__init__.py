@@ -14,6 +14,8 @@ from ._key_utils import (
 from ._stats_utils import (
     get_sample_indices,
     get_sample_size,
+    get_uuid_v7,
+    get_uuid_v7_timestamp_millis,
 )
 
 __all__ = [
@@ -26,6 +28,8 @@ __all__ = [
     "arun_batch",
     "get_sample_indices",
     "get_sample_size",
+    "get_uuid_v7",
+    "get_uuid_v7_timestamp_millis",
     "iter_batch",
     "run_batch",
 ]
