@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Self, override
 import boto3
 import botocore.exceptions
 
+from aflux import utils
 from aflux.protocols.bucket import Bucket
 from aflux.types.bucket import BucketFileMeta
 
@@ -45,14 +46,17 @@ class S3Bucket(Bucket):
         self._s3_client = s3_client
 
         self._registry_lock = threading.Lock()
-        self._active_download_map: dict[str, Future] = {}
+        self._active_download_map: dict[str, Future[pathlib.Path]] = {}
 
-    def _get_remote_file(self, remote_path: str) -> pathlib.Path:
-        remote_file = (self._temp_dir / remote_path).resolve()
-        if not remote_file.is_relative_to(self._temp_dir):
+    def _get_temp_file(self, remote_path: str) -> pathlib.Path:
+        suffix = "".join(pathlib.Path(remote_path).suffixes)
+        name = f"{utils.get_uuid_v7().hex}{suffix}"
+        temp_file = (self._temp_dir / name).resolve()
+
+        if not temp_file.is_relative_to(self._temp_dir):
             msg = f"Remote path escapes temp directory: {remote_path!r}"
             raise ValueError(msg)
-        return remote_file
+        return temp_file
 
     def _get_bucket_path(self, remote_path: str) -> str:
         return f"{self._bucket_prefix}{remote_path}"
@@ -90,47 +94,32 @@ class S3Bucket(Bucket):
                 yield file_meta
 
     @override
-    def get_file(self, remote_path: str, *, refresh: bool = False) -> pathlib.Path:
-        # called first to check `remote_path` is valid
-        remote_file = self._get_remote_file(remote_path)
-
+    def get_file(self, remote_path: str) -> pathlib.Path:
+        temp_file = self._get_temp_file(remote_path)
         with self._registry_lock:
-            if remote_path not in self._active_download_map:
-                if not refresh and remote_file.exists():
-                    return remote_file
-                future = Future()
-                self._active_download_map[remote_path] = future
-                is_downloader = True
-            else:
-                future = self._active_download_map[remote_path]
-                is_downloader = False
-
-        if not is_downloader:
-            return future.result()
+            future = Future()
+            self._active_download_map[temp_file.name] = future
 
         try:
             bucket_key = self._get_bucket_path(remote_path)
-            remote_file.parent.mkdir(parents=True, exist_ok=True)
-            self._s3_client.download_file(self._bucket_name, bucket_key, str(remote_file))
+            temp_file.parent.mkdir(parents=True, exist_ok=True)
+            self._s3_client.download_file(self._bucket_name, bucket_key, str(temp_file))
 
-            future.set_result(remote_file)
-            return remote_file
+            future.set_result(temp_file)
+            return temp_file
         except BaseException as e:
             future.set_exception(e)
             raise
         finally:
             with self._registry_lock:
-                self._active_download_map.pop(remote_path, None)
+                self._active_download_map.pop(temp_file.name, None)
 
     @override
-    def get_bytes(self, remote_path: str, *, refresh: bool = False) -> bytes:
-        if refresh:
-            bucket_key = self._get_bucket_path(remote_path)
-            buffer = io.BytesIO()
-            self._s3_client.download_fileobj(self._bucket_name, bucket_key, buffer)
-            return buffer.getvalue()
-        local_file = self.get_file(remote_path, refresh=refresh)
-        return local_file.read_bytes()
+    def get_bytes(self, remote_path: str) -> bytes:
+        bucket_key = self._get_bucket_path(remote_path)
+        buffer = io.BytesIO()
+        self._s3_client.download_fileobj(self._bucket_name, bucket_key, buffer)
+        return buffer.getvalue()
 
     @override
     def put_file(self, local_file: str | pathlib.Path, remote_path: str) -> None:

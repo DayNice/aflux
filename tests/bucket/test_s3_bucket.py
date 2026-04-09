@@ -42,9 +42,7 @@ class TestS3Bucket:
         assert bucket.get_bytes(remote_path) == b"v1"
 
         s3_client.put_object(Bucket="test-bucket", Key="data.txt", Body=b"v2")
-
-        assert bucket.get_bytes(remote_path, refresh=False) == b"v1"
-        assert bucket.get_bytes(remote_path, refresh=True) == b"v2"
+        assert bucket.get_bytes(remote_path) == b"v2"
 
     def test_context_manager_cleanup(self, s3_client, tmp_path: pathlib.Path) -> None:
         with S3Bucket("test-bucket", temp_dir=tmp_path, s3_client=s3_client) as bucket:
@@ -82,7 +80,7 @@ class TestS3Bucket:
 
             for future in futures:
                 assert future.result().read_bytes() == local_bytes
-        assert cast(mocker.MagicMock, s3_client.download_file).call_count == 1
+        assert cast(mocker.MagicMock, s3_client.download_file).call_count == 5
 
     def test_concurrent_downloads_exception(self, s3_client, mocker: MockerFixture) -> None:
         download_started = threading.Event()
@@ -110,4 +108,4 @@ class TestS3Bucket:
                 with pytest.raises(Exception) as exc_info:
                     future.result()
                 assert exc_info.value is error
-        assert cast(mocker.MagicMock, s3_client.download_file).call_count == 1
+        assert cast(mocker.MagicMock, s3_client.download_file).call_count == 5

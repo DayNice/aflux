@@ -1,9 +1,13 @@
 import datetime
 import pathlib
 import shutil
+import tempfile
+import weakref
 from collections.abc import Iterator
-from typing import override
+from types import TracebackType
+from typing import Self, override
 
+from aflux import utils
 from aflux.protocols.bucket import Bucket
 from aflux.types.bucket import BucketFileMeta
 
@@ -12,8 +16,27 @@ class DirBucket(Bucket):
     def __init__(
         self,
         root_dir: str | pathlib.Path,
+        *,
+        temp_dir: str | pathlib.Path | None = None,
     ):
         self._root_dir = pathlib.Path(root_dir).resolve()
+
+        if temp_dir is not None:
+            self._temp_dir = pathlib.Path(temp_dir).resolve()
+            self._temp_dir_finalizer = None
+        else:
+            self._temp_dir = pathlib.Path(tempfile.mkdtemp()).resolve()
+            self._temp_dir_finalizer = weakref.finalize(self, shutil.rmtree, self._temp_dir, ignore_errors=True)
+
+    def _get_temp_file(self, remote_path: str) -> pathlib.Path:
+        suffix = "".join(pathlib.Path(remote_path).suffixes)
+        name = f"{utils.get_uuid_v7().hex}{suffix}"
+        temp_file = (self._temp_dir / name).resolve()
+
+        if not temp_file.is_relative_to(self._temp_dir):
+            msg = f"Remote path escapes temp directory: {remote_path!r}"
+            raise ValueError(msg)
+        return temp_file
 
     def _get_remote_file(self, remote_path: str) -> pathlib.Path:
         remote_file = (self._root_dir / remote_path).resolve()
@@ -68,7 +91,10 @@ class DirBucket(Bucket):
 
     @override
     def get_file(self, remote_path: str, *, refresh: bool = False) -> pathlib.Path:
-        return self._validate_remote_file(remote_path)
+        remote_file = self._validate_remote_file(remote_path)
+        temp_file = self._get_temp_file(remote_path)
+        shutil.copy(remote_file, temp_file)
+        return temp_file
 
     @override
     def get_bytes(self, remote_path: str, *, refresh: bool = False) -> bytes:
@@ -101,3 +127,23 @@ class DirBucket(Bucket):
                 break
             parent_dir.rmdir()
             parent_dir = parent_dir.parent
+
+    def clear_temp_dir(self) -> None:
+        if not self._temp_dir.exists():
+            return
+        for path in self._temp_dir.iterdir():
+            if path.is_file():
+                path.unlink()
+                continue
+            shutil.rmtree(path, ignore_errors=True)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.clear_temp_dir()

@@ -25,6 +25,17 @@ class TestDirBucket:
         local_file = bucket.get_file(remote_path)
         assert local_file.read_bytes() == data
 
+    def test_local_file_is_temporary(self, tmp_path: pathlib.Path) -> None:
+        remote_file = tmp_path / "file.txt"
+        remote_file.write_text("hello")
+
+        bucket = DirBucket(tmp_path)
+        local_file = bucket.get_file("file.txt")
+        assert local_file != remote_file
+
+        local_file.unlink()
+        assert remote_file.exists()
+
     def test_delete_and_cleanup(self, tmp_path: pathlib.Path) -> None:
         bucket = DirBucket(tmp_path)
         path1 = "nested/dir/file1.txt"
