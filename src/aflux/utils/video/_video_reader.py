@@ -10,10 +10,12 @@ from typing import Self, TypedDict, cast
 
 import av
 import av.container
+import av.error
 import av.stream
 import av.video.reformatter
 import numpy as np
 import numpy.typing as npt
+from numpy.typing import NDArray
 
 from aflux import utils
 from aflux.types.video import VideoFrameInfo, VideoStatistics, VideoStreamInfo
@@ -284,24 +286,51 @@ class VideoReader:
         return next(self.decode_frames((frame_index,)))
 
     def compute_statistics(self) -> VideoStatistics:
+        # The upper bound of sample size is 385.
+        # For a 3840x2160 video, the upper bound of pixel size is 3,193,344,000 (< 2^32).
+        # Thus, `x_sum` (< 2^40) and `x_squared_sum` (< 2^48) can fit within a 64-bit integer.
         sample_indices = utils.get_sample_indices(self._stream_info.num_frames)
-        frames = self.decode_frames(sample_indices)
+        pixel_size = len(sample_indices) * self._stream_info.height * self._stream_info.width
 
-        arr = self.convert_frames_into_rgb_numpy(frames)
-        assert len(arr.shape) == 4 and arr.shape[3] == 3, "RGB array should be of shape (N, H, W, 3)."
+        x_min_list: list[list[np.int64]] = []
+        x_max_list: list[list[np.int64]] = []
+        x_sum_list: list[list[np.int64]] = []
+        x_square_sum_list: list[list[np.int64]] = []
 
-        axis = (0, 1, 2)
-        min_value = arr.min(axis) / 255.0
-        max_value = arr.max(axis) / 255.0
-        mean_value = arr.mean(axis, dtype=np.float64) / 255.0
-        std_value = arr.std(axis, dtype=np.float64) / 255.0
+        for frame in self.decode_frames(sample_indices):
+            arr = frame.to_ndarray(format="rgb24").astype(np.int64)
+            channel_indices = range(arr.shape[-1])
+
+            # for some reason this is much faster than arr.min(axis=(0, 1))
+            x_min = [arr[..., i].min() for i in channel_indices]
+            x_max = [arr[..., i].max() for i in channel_indices]
+            x_sum = [arr[..., i].sum() for i in channel_indices]
+            x_square_sum = [(arr[..., i] ** 2).sum() for i in channel_indices]
+
+            x_min_list.append(x_min)
+            x_max_list.append(x_max)
+            x_sum_list.append(x_sum)
+            x_square_sum_list.append(x_square_sum)
+
+        x_min = np.min(x_min_list, axis=0)
+        x_max = np.max(x_max_list, axis=0)
+        x_sum = np.sum(x_sum_list, axis=0, dtype=np.int64)
+        x_square_sum = np.sum(x_square_sum_list, axis=0, dtype=np.int64)
+
+        x_mean = x_sum / pixel_size
+        x_std = np.sqrt(x_square_sum / pixel_size - x_mean**2)
+
+        x_min = cast(NDArray[np.float64], x_min / 255)
+        x_max = cast(NDArray[np.float64], x_max / 255)
+        x_mean = cast(NDArray[np.float64], x_mean / 255)
+        x_std = cast(NDArray[np.float64], x_std / 255)
 
         statistics = VideoStatistics(
-            sample_size=arr.shape[0],
-            min=tuple(min_value.tolist()),
-            max=tuple(max_value.tolist()),
-            mean=tuple(mean_value.tolist()),
-            std=tuple(std_value.tolist()),
+            sample_size=len(sample_indices),
+            min=tuple(x_min.tolist()),
+            max=tuple(x_max.tolist()),
+            mean=tuple(x_mean.tolist()),
+            std=tuple(x_std.tolist()),
         )
         return statistics
 
