@@ -1,5 +1,4 @@
 import polars as pl
-import pytest
 
 from aflux.utils import dataframe as dataframe_utils
 
@@ -14,14 +13,6 @@ class TestFlattenStruct:
         result = df.select(expr)
         assert result.dtypes == [pl.Array(pl.Float64(), 2)]
         assert result["data"].to_list() == [[1.0, 2.0], [3.0, 4.0]]
-
-    def test_heterogeneous_struct_raises_error(self) -> None:
-        df = pl.DataFrame(
-            {"data": [{"x": 1.0, "y": 2}]},
-            schema={"data": pl.Struct({"x": pl.Float64(), "y": pl.Int64()})},
-        )
-        with pytest.raises(ValueError, match="multiple field dtypes"):
-            dataframe_utils.flatten_struct(pl.col("data"), df.schema["data"])
 
     def test_nested_list_of_structs(self) -> None:
         df = pl.DataFrame(

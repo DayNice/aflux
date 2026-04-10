@@ -8,11 +8,6 @@ def flatten_struct(
 ) -> pl.Expr:
     match root_dtype:
         case pl.Struct():
-            field_dtype_set = {el.dtype for el in root_dtype.fields}
-            if len(field_dtype_set) != 1:
-                msg = f"Struct with multiple field dtypes cannot be flattened: {field_dtype_set}"
-                raise ValueError(msg)
-
             field_exprs: list[pl.Expr] = []
             for field in root_dtype.fields:
                 field_expr = flatten_struct(root_expr.struct.field(field.name), field.dtype)
