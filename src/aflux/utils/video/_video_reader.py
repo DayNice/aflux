@@ -287,10 +287,10 @@ class VideoReader:
 
     def compute_statistics(self) -> VideoStatistics:
         # The upper bound of sample size is 385.
-        # For a 3840x2160 video, the upper bound of pixel size is 3,193,344,000 (< 2^32).
+        # For a 3840x2160 video, the upper bound of num pixels is 3,193,344,000 (< 2^32).
         # Thus, `x_sum` (< 2^40) and `x_squared_sum` (< 2^48) can fit within a 64-bit integer.
         sample_indices = utils.get_sample_indices(self._stream_info.num_frames)
-        pixel_size = len(sample_indices) * self._stream_info.height * self._stream_info.width
+        num_pixels = len(sample_indices) * self._stream_info.height * self._stream_info.width
 
         x_min_list: list[list[np.int64]] = []
         x_max_list: list[list[np.int64]] = []
@@ -317,8 +317,8 @@ class VideoReader:
         x_sum = np.sum(x_sum_list, axis=0, dtype=np.int64)
         x_square_sum = np.sum(x_square_sum_list, axis=0, dtype=np.int64)
 
-        x_mean = x_sum / pixel_size
-        x_std = np.sqrt(x_square_sum / pixel_size - x_mean**2)
+        x_mean = x_sum / num_pixels
+        x_std = np.sqrt(x_square_sum / num_pixels - x_mean**2)
 
         x_min = cast(NDArray[np.float64], x_min / 255)
         x_max = cast(NDArray[np.float64], x_max / 255)
