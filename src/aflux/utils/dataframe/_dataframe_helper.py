@@ -1,5 +1,44 @@
+from typing import Any
+
 import polars as pl
 from polars.datatypes import DataType, DataTypeClass
+
+
+def convert_dtype_into_json_schema(dtype: DataType | DataTypeClass) -> dict[str, Any]:
+    match dtype:
+        case pl.String | pl.Categorical | pl.Enum:
+            return {"type": "string"}
+        case pl.Int8 | pl.Int16 | pl.Int32 | pl.Int64 | pl.UInt8 | pl.UInt16 | pl.UInt32 | pl.UInt64:
+            return {"type": "integer"}
+        case pl.Float32 | pl.Float64:
+            return {"type": "number"}
+        case pl.Boolean:
+            return {"type": "boolean"}
+        case pl.Date:
+            return {"type": "string", "format": "date"}
+        case pl.Datetime:
+            return {"type": "string", "format": "date-time"}
+        case pl.Time:
+            return {"type": "string", "format": "time"}
+        case pl.List():
+            return {"type": "array", "items": convert_dtype_into_json_schema(dtype.inner)}
+        case pl.Array():
+            return {
+                "type": "array",
+                "minItems": dtype.size,
+                "maxItems": dtype.size,
+                "items": convert_dtype_into_json_schema(dtype.inner),
+            }
+        case pl.Struct():
+            return {
+                "type": "object",
+                "properties": {field.name: convert_dtype_into_json_schema(field.dtype) for field in dtype.fields},
+            }
+        case pl.Null:
+            return {"type": "null"}
+        case _:
+            msg = f"Unknown dtype: {dtype}"
+            raise ValueError(msg)
 
 
 def flatten_struct(
