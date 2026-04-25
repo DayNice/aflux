@@ -4,41 +4,50 @@ import polars as pl
 from polars.datatypes import DataType, DataTypeClass
 
 
-def convert_dtype_into_json_schema(dtype: DataType | DataTypeClass) -> dict[str, Any]:
+def convert_dtype_into_json_schema(
+    dtype: DataType | DataTypeClass,
+    nullable: bool = False,
+) -> dict[str, Any]:
     match dtype:
-        case pl.String | pl.Categorical | pl.Enum:
-            return {"type": "string"}
-        case pl.Int8 | pl.Int16 | pl.Int32 | pl.Int64 | pl.UInt8 | pl.UInt16 | pl.UInt32 | pl.UInt64:
-            return {"type": "integer"}
-        case pl.Float32 | pl.Float64:
-            return {"type": "number"}
         case pl.Boolean:
-            return {"type": "boolean"}
-        case pl.Date:
-            return {"type": "string", "format": "date"}
-        case pl.Datetime:
-            return {"type": "string", "format": "date-time"}
-        case pl.Time:
-            return {"type": "string", "format": "time"}
-        case pl.List():
-            return {"type": "array", "items": convert_dtype_into_json_schema(dtype.inner)}
-        case pl.Array():
+            return {"type": "boolean" if not nullable else ["boolean", "null"]}
+        case pl.Int8 | pl.Int16 | pl.Int32 | pl.Int64 | pl.UInt8 | pl.UInt16 | pl.UInt32 | pl.UInt64:
+            return {"type": "integer" if not nullable else ["integer", "null"]}
+        case pl.Float32 | pl.Float64:
+            return {"type": "number" if not nullable else ["number", "null"]}
+        case pl.String | pl.Categorical | pl.Enum | pl.Date | pl.Datetime | pl.Time:
+            return {"type": "string" if not nullable else ["string", "null"]}
+        case pl.List() | pl.Array():
             return {
-                "type": "array",
-                "minItems": dtype.size,
-                "maxItems": dtype.size,
-                "items": convert_dtype_into_json_schema(dtype.inner),
+                "type": "array" if not nullable else ["array", "null"],
+                "items": convert_dtype_into_json_schema(dtype.inner, nullable),
             }
         case pl.Struct():
+            properties: dict[str, Any] = {}
+            for field in dtype.fields:
+                properties[field.name] = convert_dtype_into_json_schema(field.dtype, nullable)
             return {
-                "type": "object",
-                "properties": {field.name: convert_dtype_into_json_schema(field.dtype) for field in dtype.fields},
+                "type": "object" if not nullable else ["object", "null"],
+                "properties": properties,
             }
         case pl.Null:
             return {"type": "null"}
         case _:
             msg = f"Unknown dtype: {dtype}"
             raise ValueError(msg)
+
+
+def convert_schema_into_json_schema(
+    schema: pl.Schema,
+    nullable: bool = False,
+) -> dict[str, Any]:
+    properties: dict[str, Any] = {}
+    for name, dtype in schema.items():
+        properties[name] = convert_dtype_into_json_schema(dtype, nullable)
+    return {
+        "type": "object" if not nullable else ["object", "null"],
+        "properties": properties,
+    }
 
 
 def flatten_struct(

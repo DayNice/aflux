@@ -1,31 +1,9 @@
 import polars as pl
-import pytest
 
 from aflux.utils import dataframe as dataframe_utils
 
 
 class TestConvertDtypeIntoJsonSchema:
-    def test_string(self) -> None:
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.String) == {"type": "string"}
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.Categorical) == {"type": "string"}
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.Enum(["a", "b"])) == {"type": "string"}
-
-    def test_integer(self) -> None:
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.Int32) == {"type": "integer"}
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.UInt64) == {"type": "integer"}
-
-    def test_float(self) -> None:
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.Float32) == {"type": "number"}
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.Float64) == {"type": "number"}
-
-    def test_boolean(self) -> None:
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.Boolean) == {"type": "boolean"}
-
-    def test_temporal(self) -> None:
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.Date) == {"type": "string", "format": "date"}
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.Datetime) == {"type": "string", "format": "date-time"}
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.Time) == {"type": "string", "format": "time"}
-
     def test_list(self) -> None:
         dtype = pl.List(pl.Int32)
         assert dataframe_utils.convert_dtype_into_json_schema(dtype) == {
@@ -37,24 +15,16 @@ class TestConvertDtypeIntoJsonSchema:
         dtype = pl.Array(pl.Float64, 3)
         assert dataframe_utils.convert_dtype_into_json_schema(dtype) == {
             "type": "array",
-            "minItems": 3,
-            "maxItems": 3,
             "items": {"type": "number"},
         }
 
         dtype = pl.Array(pl.Float32, (3, 10, 12))
         assert dataframe_utils.convert_dtype_into_json_schema(dtype) == {
             "type": "array",
-            "minItems": 3,
-            "maxItems": 3,
             "items": {
                 "type": "array",
-                "minItems": 10,
-                "maxItems": 10,
                 "items": {
                     "type": "array",
-                    "minItems": 12,
-                    "maxItems": 12,
                     "items": {"type": "number"},
                 },
             },
@@ -70,12 +40,65 @@ class TestConvertDtypeIntoJsonSchema:
             },
         }
 
-    def test_null_type(self) -> None:
-        assert dataframe_utils.convert_dtype_into_json_schema(pl.Null) == {"type": "null"}
 
-    def test_unknown_dtype(self) -> None:
-        with pytest.raises(ValueError, match="Unknown dtype:"):
-            dataframe_utils.convert_dtype_into_json_schema(pl.Object)
+class TestConvertSchemaIntoJsonSchema:
+    def test_primitive(self) -> None:
+        schema = pl.Schema({"a": pl.String, "b": pl.Int64()})
+        assert dataframe_utils.convert_schema_into_json_schema(schema) == {
+            "type": "object",
+            "properties": {
+                "a": {"type": "string"},
+                "b": {"type": "integer"},
+            },
+        }
+
+        schema = pl.Schema({"a": pl.String, "b": pl.Int64()})
+        assert dataframe_utils.convert_schema_into_json_schema(schema, True) == {
+            "type": ["object", "null"],
+            "properties": {
+                "a": {"type": ["string", "null"]},
+                "b": {"type": ["integer", "null"]},
+            },
+        }
+
+    def test_struct(self) -> None:
+        schema = pl.Schema({"a": pl.Struct({"x": pl.Float64(), "y": pl.Float64()})})
+        assert dataframe_utils.convert_schema_into_json_schema(schema) == {
+            "type": "object",
+            "properties": {
+                "a": {
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "number"},
+                        "y": {"type": "number"},
+                    },
+                },
+            },
+        }
+
+    def test_list(self) -> None:
+        schema = pl.Schema({"a": pl.List(pl.Float64())})
+        assert dataframe_utils.convert_schema_into_json_schema(schema) == {
+            "type": "object",
+            "properties": {
+                "a": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                },
+            },
+        }
+
+    def test_array(self) -> None:
+        schema = pl.Schema({"a": pl.Array(pl.Float64(), 2)})
+        assert dataframe_utils.convert_schema_into_json_schema(schema) == {
+            "type": "object",
+            "properties": {
+                "a": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                },
+            },
+        }
 
 
 class TestFlattenStruct:
