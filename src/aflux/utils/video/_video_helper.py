@@ -64,6 +64,42 @@ def merge_video_statistics_list(video_statistics_list: Iterable[VideoStatistics]
     )
 
 
+def infer_target_bits_per_pixel(
+    num_pixels: int,
+    fps: int | Fraction,
+    *,
+    complexity_constant: float = 16.908,
+    spatial_scaling_factor: float = 0.687,
+    temporal_scaling_factor: float = 0.560,
+) -> float:
+    """Infer target bits per pixel for a given (num_pixels, fps) combination.
+
+    Assumes the following relation:
+
+        bit_rate = complexity_constant
+            * (num_pixels ^ spatial_scaling_factor)
+            * (fps ^ temporal_scaling_factor)
+
+        bit_rate = bits_per_pixel * num_pixels * fps
+
+    Default parameters were set using `scipy.optimize.curve_fit` against the following values.
+        - 480p 30fps: 1/15
+        - 720p 30fps: 1/20
+        - 1080p 30fps: 1/25
+        - 1080p 60fps: 1/35
+        - 4k 60fps: 1/50
+    """
+    if num_pixels <= 0:
+        raise ValueError("Number of pixels should be a positive value.")
+    if fps <= 0:
+        raise ValueError("Frame rate should a positive value.")
+
+    bits_per_pixel = complexity_constant
+    bits_per_pixel *= num_pixels ** (spatial_scaling_factor - 1.0)
+    bits_per_pixel *= float(fps) ** (temporal_scaling_factor - 1.0)
+    return bits_per_pixel
+
+
 def remux_video_into_mp4(
     input_file: str | Path,
     output_file: str | Path,
