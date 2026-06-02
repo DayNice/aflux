@@ -1,5 +1,7 @@
+import contextlib
 import itertools
 import math
+import tempfile
 from collections.abc import Iterable
 from fractions import Fraction
 from pathlib import Path
@@ -12,6 +14,8 @@ import av.video.reformatter
 import PIL.Image
 
 from aflux.types.video import VideoStatistics
+
+from ._video_reader import VideoReader, get_video_stream_info
 
 
 def merge_video_statistics_list(video_statistics_list: Iterable[VideoStatistics]) -> VideoStatistics:
@@ -177,6 +181,235 @@ def encode_images_into_mp4(
             frame = av.VideoFrame.from_image(image)
             for packet in stream.encode(frame):
                 container.mux(packet)
+
+        for packet in stream.encode():
+            container.mux(packet)
+
+
+def mux_copy_video_segment(
+    input_file: str | Path,
+    output_file: str | Path,
+    from_frame_index: int,
+    to_frame_index: int,
+) -> None:
+    """Copy a video segment by muxing packets.
+
+    Assumes the given range corresponds to valid GOP (Group of Pictures) boundaries.
+    """
+    with (
+        VideoReader(input_file) as input_reader,
+        av.open(output_file, "w", format="mp4", options={"movflags": "faststart"}) as output_container,
+    ):
+        stream_info = input_reader.get_stream_info()
+        from_frame_info = input_reader.get_frame_info(from_frame_index)
+        to_frame_info = input_reader.get_frame_info(to_frame_index)
+
+        # TODO: use public attributes instead of private ones
+        output_stream = output_container.add_stream_from_template(
+            input_reader._stream,
+            True,  # prevents 'Unknown codec' error
+            rate=stream_info.fps,
+            time_base=stream_info.time_base,
+            width=stream_info.width,
+            height=stream_info.height,
+            pix_fmt=stream_info.pixel_format,
+        )
+
+        # TODO: use public methods instead of private ones
+        input_reader._seek_pts(from_frame_info.pts)
+        for packet in input_reader._demux_packets():
+            # ignore 'flush packet'
+            if packet.size == 0 and packet.dts is None and packet.pts is None:
+                continue
+
+            assert packet.pts is not None, "Packet should have a valid pts."
+            if packet.pts < from_frame_info.pts:
+                continue
+            if packet.pts >= to_frame_info.pts:
+                break
+
+            packet.pts -= from_frame_info.pts
+            packet.dts = None  # re-generate dts value
+            packet.stream = output_stream
+            output_container.mux(packet)
+
+
+def encode_copy_video_segment(
+    input_file: str | Path,
+    output_file: str | Path,
+    from_frame_index: int,
+    to_frame_index: int,
+) -> None:
+    """Copy a video segment by encoding frames."""
+    with (
+        VideoReader(input_file) as input_reader,
+        av.open(output_file, "w", format="mp4", options={"movflags": "faststart"}) as output_container,
+    ):
+        stream_info = input_reader.get_stream_info()
+        from_frame_info = input_reader.get_frame_info(from_frame_index)
+
+        output_stream = output_container.add_stream(
+            stream_info.codec,
+            rate=stream_info.fps,
+            time_base=stream_info.time_base,
+            width=stream_info.width,
+            height=stream_info.height,
+            pix_fmt=stream_info.pixel_format,
+        )
+        output_stream = cast(av.VideoStream, output_stream)
+
+        for frame in input_reader.decode_frames(range(from_frame_index, to_frame_index)):
+            assert frame.pts is not None, "Frame should have a valid pts value."
+            frame.pts -= from_frame_info.pts
+            if frame.dts is not None:
+                frame.dts = frame.pts
+            for packet in output_stream.encode(frame):
+                output_container.mux(packet)
+        for packet in output_stream.encode():
+            output_container.mux(packet)
+
+
+def mux_concat_videos(
+    input_files: Iterable[str | Path],
+    output_file: str | Path,
+) -> None:
+    """Concatenate videos using a demuxer.
+
+    The following attributes must be same for all input videos:
+      - frame rate
+      - time base
+      - height
+      - width
+      - codec
+      - pixel format
+    """
+    input_files = [Path(el) for el in input_files]
+    if len(input_files) == 0:
+        raise ValueError("Provide at least one video file.")
+
+    stream_info = get_video_stream_info(input_files[0])
+    for input_file in input_files[1:]:
+        other_stream_info = get_video_stream_info(input_file)
+        if (
+            other_stream_info.fps != stream_info.fps
+            or other_stream_info.time_base != stream_info.time_base
+            or other_stream_info.height != stream_info.height
+            or other_stream_info.width != stream_info.width
+            or other_stream_info.codec != stream_info.codec
+            or other_stream_info.pixel_format != stream_info.pixel_format
+        ):
+            msg = f"Found incompatible videos: {input_file} {input_files[0]}"
+            raise ValueError(msg)
+
+    with contextlib.ExitStack() as stack:
+        ffconcat_file = stack.enter_context(tempfile.NamedTemporaryFile(delete_on_close=False))
+        ffconcat_file = Path(ffconcat_file.name)
+        ffconcat_file.write_text("".join(f"file {el.absolute()}\n" for el in input_files))
+
+        input_container = stack.enter_context(
+            av.open(ffconcat_file, format="concat", options={"safe": "0"}),
+        )
+        output_container = stack.enter_context(
+            av.open(output_file, "w", format="mp4", options={"movflags": "faststart"}),
+        )
+
+        assert len(input_container.streams.video) > 0
+        input_stream = input_container.streams.video[0]
+
+        output_stream = output_container.add_stream_from_template(
+            input_stream,
+            True,
+            rate=stream_info.fps,
+            time_base=stream_info.time_base,
+            width=stream_info.width,
+            height=stream_info.height,
+            pix_fmt=stream_info.pixel_format,
+        )
+        for packet in input_container.demux(input_stream):
+            # ignore 'flush packet'
+            if packet.size == 0 and packet.dts is None and packet.pts is None:
+                continue
+            packet.dts = None  # re-generate dts value
+            packet.stream = output_stream
+            output_container.mux(packet)
+
+
+def encode_concat_videos(
+    input_files: Iterable[str | Path],
+    output_file: str | Path,
+    *,
+    max_bits_per_pixel: float | Fraction | None = None,
+) -> None:
+    """Concatenate videos using an encoder.
+
+    The following attributes must be same for all input videos:
+      - frame rate
+      - height
+      - width
+      - num channels
+    """
+
+    input_files = [Path(el) for el in input_files]
+    if len(input_files) == 0:
+        raise ValueError("Should provide at least one video.")
+
+    stream_info = get_video_stream_info(input_files[0])
+    for input_file in input_files[1:]:
+        other_stream_info = get_video_stream_info(input_file)
+        if (
+            other_stream_info.fps != stream_info.fps
+            or other_stream_info.height != stream_info.height
+            or other_stream_info.width != stream_info.width
+            or other_stream_info.num_channels != stream_info.num_channels
+        ):
+            msg = f"Found incompatible videos: {input_file} {input_files[0]}"
+            raise ValueError(msg)
+
+    fps = stream_info.fps
+    width = stream_info.width
+    height = stream_info.height
+    time_base = Fraction(1, 90000)
+    pixel_format = "yuv420p10le"
+
+    num_pixels = width * height
+    if max_bits_per_pixel is None:
+        max_bits_per_pixel = infer_target_bits_per_pixel(num_pixels, fps) * 2
+    max_bits_per_sec = width * height * fps * max_bits_per_pixel
+    pts_per_frame = 1 / (fps * time_base)
+
+    encoder_options = {
+        "preset": "6",
+        "crf": "26",
+        "svtav1-params": "tune=0",
+        "maxrate": f"{round(max_bits_per_sec)}",
+        "bufsize": f"{round(max_bits_per_sec * 2)}",
+    }
+
+    with av.open(output_file, "w", format="mp4", options={"movflags": "faststart"}) as container:
+        stream = container.add_stream(
+            "libsvtav1",
+            fps,
+            encoder_options,
+            width=width,
+            height=height,
+            pix_fmt=pixel_format,
+            gop_size=round(fps * 2),
+            time_base=time_base,
+        )
+        stream = cast(av.VideoStream, stream)
+
+        num_frames = 0
+        reformatter = av.video.reformatter.VideoReformatter()
+        for input_file in input_files:
+            with VideoReader(input_file) as video_reader:
+                for frame in video_reader.decode_frames():
+                    frame = reformatter.reformat(frame, format=pixel_format)
+                    frame.time_base = time_base
+                    frame.pts = round(num_frames * pts_per_frame)
+                    frame.dts = frame.pts
+                    for packet in stream.encode(frame):
+                        container.mux(packet)
+                    num_frames += 1
 
         for packet in stream.encode():
             container.mux(packet)
