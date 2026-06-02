@@ -140,8 +140,8 @@ def encode_images_into_mp4(
     images: Iterable[PIL.Image.Image],
     output_file: str | Path,
     *,
-    fps: Fraction = Fraction(30, 1),
-    bits_per_pixel: Fraction = Fraction(1, 25),
+    fps: int | Fraction = 30,
+    max_bits_per_pixel: float | Fraction | None = None,
 ):
     output_file = Path(output_file)
 
@@ -151,18 +151,21 @@ def encode_images_into_mp4(
         raise ValueError("Provide at least one image.")
     images = itertools.chain([sample_image], images)
 
-    bits_per_sec = sample_image.width * sample_image.height * fps * bits_per_pixel
+    if max_bits_per_pixel is None:
+        num_pixels = sample_image.width * sample_image.height
+        max_bits_per_pixel = infer_target_bits_per_pixel(num_pixels, fps)
+    max_bits_per_sec = sample_image.width * sample_image.height * fps * max_bits_per_pixel
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     encoder_options = {
         "preset": "6",
         "crf": "26",
         "svtav1-params": "tune=0",
-        "maxrate": f"{round(bits_per_sec)}",
-        "bufsize": f"{round(bits_per_sec * 2)}",
+        "maxrate": f"{round(max_bits_per_sec)}",
+        "bufsize": f"{round(max_bits_per_sec * 2)}",
     }
 
-    with av.open(output_file, "w", format="mp4") as container:
+    with av.open(output_file, "w", format="mp4", options={"movflags": "faststart"}) as container:
         stream = cast(av.VideoStream, container.add_stream("libsvtav1", fps, encoder_options))
         stream.width = sample_image.width
         stream.height = sample_image.height
