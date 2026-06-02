@@ -391,7 +391,7 @@ def get_video_keyframe_infos(video_file: str | Path) -> list[VideoFrameInfo]:
 
 def decode_video_frames(
     video_file: str | Path,
-    frame_indices: Iterable[int],
+    frame_indices: Iterable[int] | None = None,
 ) -> Iterator[av.VideoFrame]:
     with VideoReader(video_file) as video_reader:
         yield from video_reader.decode_frames(frame_indices)
