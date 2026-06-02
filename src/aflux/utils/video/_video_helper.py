@@ -1,6 +1,6 @@
 import itertools
 import math
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from fractions import Fraction
 from pathlib import Path
 from typing import cast
@@ -11,37 +11,7 @@ import av.stream
 import av.video.reformatter
 import PIL.Image
 
-from aflux.types.video import VideoFrameInfo, VideoStatistics, VideoStreamInfo
-
-from ._video_reader import VideoReader
-
-
-def get_video_stream_info(video_file: str | Path) -> VideoStreamInfo:
-    with VideoReader(video_file) as video_reader:
-        return video_reader.get_stream_info()
-
-
-def get_video_frame_infos(video_file: str | Path) -> list[VideoFrameInfo]:
-    with VideoReader(video_file) as video_reader:
-        return video_reader.get_frame_infos()
-
-
-def get_video_keyframe_infos(video_file: str | Path) -> list[VideoFrameInfo]:
-    with VideoReader(video_file) as video_reader:
-        return video_reader.get_keyframe_infos()
-
-
-def decode_video_frames(
-    video_file: str | Path,
-    frame_indices: Iterable[int],
-) -> Iterator[av.VideoFrame]:
-    with VideoReader(video_file) as video_reader:
-        yield from video_reader.decode_frames(frame_indices)
-
-
-def compute_video_statistics(video_file: str | Path) -> VideoStatistics:
-    with VideoReader(video_file) as video_reader:
-        return video_reader.compute_statistics()
+from aflux.types.video import VideoStatistics
 
 
 def merge_video_statistics_list(video_statistics_list: Iterable[VideoStatistics]) -> VideoStatistics:

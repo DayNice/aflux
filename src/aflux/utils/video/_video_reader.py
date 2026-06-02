@@ -372,3 +372,31 @@ class VideoReader:
         exc_tb: TracebackType | None,
     ) -> None:
         self.close()
+
+
+def get_video_stream_info(video_file: str | Path) -> VideoStreamInfo:
+    with VideoReader(video_file) as video_reader:
+        return video_reader.get_stream_info()
+
+
+def get_video_frame_infos(video_file: str | Path) -> list[VideoFrameInfo]:
+    with VideoReader(video_file) as video_reader:
+        return video_reader.get_frame_infos()
+
+
+def get_video_keyframe_infos(video_file: str | Path) -> list[VideoFrameInfo]:
+    with VideoReader(video_file) as video_reader:
+        return video_reader.get_keyframe_infos()
+
+
+def decode_video_frames(
+    video_file: str | Path,
+    frame_indices: Iterable[int],
+) -> Iterator[av.VideoFrame]:
+    with VideoReader(video_file) as video_reader:
+        yield from video_reader.decode_frames(frame_indices)
+
+
+def compute_video_statistics(video_file: str | Path) -> VideoStatistics:
+    with VideoReader(video_file) as video_reader:
+        return video_reader.compute_statistics()
