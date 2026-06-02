@@ -2,9 +2,9 @@ import bisect
 import functools
 import math
 import operator
-import pathlib
 from collections.abc import Iterable, Iterator
 from fractions import Fraction
+from pathlib import Path
 from types import TracebackType
 from typing import Self, TypedDict, cast
 
@@ -22,8 +22,8 @@ from aflux.types.video import VideoFrameInfo, VideoStatistics, VideoStreamInfo
 
 
 class VideoReader:
-    def __init__(self, video_file: str | pathlib.Path) -> None:
-        self.file = pathlib.Path(video_file)
+    def __init__(self, video_file: str | Path) -> None:
+        self.file = Path(video_file)
         self._container = av.open(self.file)
         if len(self._container.streams.video) == 0:
             self._container.close()

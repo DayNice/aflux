@@ -1,8 +1,8 @@
 import itertools
 import math
-import pathlib
 from collections.abc import Iterable, Iterator
 from fractions import Fraction
+from pathlib import Path
 from typing import cast
 
 import av
@@ -16,30 +16,30 @@ from aflux.types.video import VideoFrameInfo, VideoStatistics, VideoStreamInfo
 from ._video_reader import VideoReader
 
 
-def get_video_stream_info(video_file: str | pathlib.Path) -> VideoStreamInfo:
+def get_video_stream_info(video_file: str | Path) -> VideoStreamInfo:
     with VideoReader(video_file) as video_reader:
         return video_reader.get_stream_info()
 
 
-def get_video_frame_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo]:
+def get_video_frame_infos(video_file: str | Path) -> list[VideoFrameInfo]:
     with VideoReader(video_file) as video_reader:
         return video_reader.get_frame_infos()
 
 
-def get_video_keyframe_infos(video_file: str | pathlib.Path) -> list[VideoFrameInfo]:
+def get_video_keyframe_infos(video_file: str | Path) -> list[VideoFrameInfo]:
     with VideoReader(video_file) as video_reader:
         return video_reader.get_keyframe_infos()
 
 
 def decode_video_frames(
-    video_file: str | pathlib.Path,
+    video_file: str | Path,
     frame_indices: Iterable[int],
 ) -> Iterator[av.VideoFrame]:
     with VideoReader(video_file) as video_reader:
         yield from video_reader.decode_frames(frame_indices)
 
 
-def compute_video_statistics(video_file: str | pathlib.Path) -> VideoStatistics:
+def compute_video_statistics(video_file: str | Path) -> VideoStatistics:
     with VideoReader(video_file) as video_reader:
         return video_reader.compute_statistics()
 
@@ -95,8 +95,8 @@ def merge_video_statistics_list(video_statistics_list: Iterable[VideoStatistics]
 
 
 def remux_video_into_mp4(
-    input_file: str | pathlib.Path,
-    output_file: str | pathlib.Path,
+    input_file: str | Path,
+    output_file: str | Path,
 ) -> None:
     with (
         av.open(input_file) as input_container,
@@ -132,12 +132,12 @@ def remux_video_into_mp4(
 
 def encode_images_into_mp4(
     images: Iterable[PIL.Image.Image],
-    output_file: str | pathlib.Path,
+    output_file: str | Path,
     *,
     fps: Fraction = Fraction(30, 1),
     bits_per_pixel: Fraction = Fraction(1, 25),
 ):
-    output_file = pathlib.Path(output_file)
+    output_file = Path(output_file)
 
     images = iter(images)
     sample_image = next(images, None)

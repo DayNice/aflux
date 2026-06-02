@@ -1,4 +1,4 @@
-import pathlib
+from pathlib import Path
 
 import polars as pl
 import pytest
@@ -9,7 +9,7 @@ from aflux.utils.ros import BagReader
 
 
 @pytest.fixture
-def tmp_rosbag(tmp_path: pathlib.Path) -> pathlib.Path:
+def tmp_rosbag(tmp_path: Path) -> Path:
     bag_path = tmp_path / "test_bag"
 
     typestore = get_typestore(Stores.LATEST)
@@ -25,7 +25,7 @@ def tmp_rosbag(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 class TestBagReader:
-    def test_topic_info_map(self, tmp_rosbag: pathlib.Path) -> None:
+    def test_topic_info_map(self, tmp_rosbag: Path) -> None:
         with BagReader(tmp_rosbag) as reader:
             info = reader.topic_info_map["/test_topic"]
 
@@ -33,7 +33,7 @@ class TestBagReader:
             assert info.message_type == "std_msgs/msg/Float64"
             assert info.num_messages == 10
 
-    def test_get_messages(self, tmp_rosbag: pathlib.Path) -> None:
+    def test_get_messages(self, tmp_rosbag: Path) -> None:
         with BagReader(tmp_rosbag) as reader:
             message_tuples = list(reader.get_messages("/test_topic"))
 
@@ -42,7 +42,7 @@ class TestBagReader:
                 assert timestamp == i * 1_000_000_000
                 assert message.data == float(i)
 
-    def test_get_message_dataframe(self, tmp_rosbag: pathlib.Path) -> None:
+    def test_get_message_dataframe(self, tmp_rosbag: Path) -> None:
         with BagReader(tmp_rosbag) as reader:
             df = reader.get_message_dataframe("/test_topic")
 

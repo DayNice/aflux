@@ -1,12 +1,12 @@
-import pathlib
+from pathlib import Path
 
 from rosbags.interfaces.typing import Typesdict
 from rosbags.typesys import get_types_from_msg
 from rosbags.typesys.store import Typestore
 
 
-def read_message_schema_dir(message_schema_dir: str | pathlib.Path) -> dict[str, str]:
-    message_schema_dir = pathlib.Path(message_schema_dir)
+def read_message_schema_dir(message_schema_dir: str | Path) -> dict[str, str]:
+    message_schema_dir = Path(message_schema_dir)
 
     message_schema_map: dict[str, str] = {}
     for message_schema_file in message_schema_dir.rglob("*.msg"):
@@ -29,7 +29,7 @@ def register_message_schema_map(
 
 def register_message_schema_dir(
     typestore: Typestore,
-    message_schema_dir: str | pathlib.Path,
+    message_schema_dir: str | Path,
 ) -> None:
     message_schema_map = read_message_schema_dir(message_schema_dir)
     register_message_schema_map(typestore, message_schema_map)

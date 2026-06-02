@@ -1,11 +1,11 @@
 import io
-import pathlib
 import shutil
 import tempfile
 import threading
 import weakref
 from collections.abc import Iterator
 from concurrent.futures import Future
+from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Self, override
 
@@ -28,17 +28,17 @@ class S3Bucket(Bucket):
         bucket_name: str,
         bucket_prefix: str = "",
         *,
-        temp_dir: str | pathlib.Path | None = None,
+        temp_dir: str | Path | None = None,
         s3_client: S3Client | None = None,
     ):
         self._bucket_name = bucket_name
         self._bucket_prefix = bucket_prefix
 
         if temp_dir is not None:
-            self._temp_dir = pathlib.Path(temp_dir).resolve()
+            self._temp_dir = Path(temp_dir).resolve()
             self._temp_dir_finalizer = None
         else:
-            self._temp_dir = pathlib.Path(tempfile.mkdtemp()).resolve()
+            self._temp_dir = Path(tempfile.mkdtemp()).resolve()
             self._temp_dir_finalizer = weakref.finalize(self, shutil.rmtree, self._temp_dir, ignore_errors=True)
 
         if s3_client is None:
@@ -46,10 +46,10 @@ class S3Bucket(Bucket):
         self._s3_client = s3_client
 
         self._registry_lock = threading.Lock()
-        self._active_download_map: dict[str, Future[pathlib.Path]] = {}
+        self._active_download_map: dict[str, Future[Path]] = {}
 
-    def _get_temp_file(self, remote_path: str) -> pathlib.Path:
-        suffix = "".join(pathlib.Path(remote_path).suffixes)
+    def _get_temp_file(self, remote_path: str) -> Path:
+        suffix = "".join(Path(remote_path).suffixes)
         name = f"{utils.get_uuid_v7().hex}{suffix}"
         temp_file = (self._temp_dir / name).resolve()
 
@@ -94,7 +94,7 @@ class S3Bucket(Bucket):
                 yield file_meta
 
     @override
-    def get_file(self, remote_path: str) -> pathlib.Path:
+    def get_file(self, remote_path: str) -> Path:
         temp_file = self._get_temp_file(remote_path)
         with self._registry_lock:
             future = Future()
@@ -122,7 +122,7 @@ class S3Bucket(Bucket):
         return buffer.getvalue()
 
     @override
-    def put_file(self, local_file: str | pathlib.Path, remote_path: str) -> None:
+    def put_file(self, local_file: str | Path, remote_path: str) -> None:
         bucket_key = self._get_bucket_path(remote_path)
         self._s3_client.upload_file(str(local_file), self._bucket_name, bucket_key)
 

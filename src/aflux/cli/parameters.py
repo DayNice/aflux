@@ -1,26 +1,26 @@
 import itertools
-import pathlib
+from pathlib import Path
 from typing import Annotated, Sequence
 
 from cyclopts import Parameter, Token, validators
 
 InputFile = Annotated[
-    pathlib.Path,
+    Path,
     Parameter(validator=validators.Path(exists=True, dir_okay=False)),
 ]
 
 InputDir = Annotated[
-    pathlib.Path,
+    Path,
     Parameter(validator=validators.Path(exists=True, file_okay=False)),
 ]
 
 OutputDir = Annotated[
-    pathlib.Path,
+    Path,
     Parameter(validator=validators.Path(file_okay=False)),
 ]
 
 OutputFile = Annotated[
-    pathlib.Path,
+    Path,
     Parameter(validator=validators.Path(dir_okay=False)),
 ]
 

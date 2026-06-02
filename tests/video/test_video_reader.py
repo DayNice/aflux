@@ -1,5 +1,5 @@
-import pathlib
 from fractions import Fraction
+from pathlib import Path
 
 import numpy as np
 import PIL.Image
@@ -10,7 +10,7 @@ from aflux.utils.video import VideoReader
 
 
 @pytest.fixture
-def tmp_video(tmp_path: pathlib.Path) -> pathlib.Path:
+def tmp_video(tmp_path: Path) -> Path:
     video_path = tmp_path / "test.mp4"
     red_image = PIL.Image.new("RGB", (128, 128), color=(255, 0, 0))
     blue_image = PIL.Image.new("RGB", (128, 128), color=(0, 0, 255))
@@ -21,7 +21,7 @@ def tmp_video(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 class TestVideoReader:
-    def test_get_stream_info(self, tmp_video: pathlib.Path) -> None:
+    def test_get_stream_info(self, tmp_video: Path) -> None:
         with VideoReader(tmp_video) as video_reader:
             info = video_reader.get_stream_info()
 
@@ -30,7 +30,7 @@ class TestVideoReader:
         assert info.num_frames == 10
         assert info.fps == Fraction(30, 1)
 
-    def test_decode_frames(self, tmp_video: pathlib.Path) -> None:
+    def test_decode_frames(self, tmp_video: Path) -> None:
         with VideoReader(tmp_video) as reader:
             frames = list(reader.decode_frames([0, 5, 9]))
 
@@ -51,7 +51,7 @@ class TestVideoReader:
         assert np.mean(arr_9[:, :, 0]) < 50
         assert np.mean(arr_9[:, :, 2]) > 200
 
-    def test_compute_statistics(self, tmp_video: pathlib.Path) -> None:
+    def test_compute_statistics(self, tmp_video: Path) -> None:
         with VideoReader(tmp_video) as reader:
             stats = reader.compute_statistics()
 
@@ -71,7 +71,7 @@ class TestVideoReader:
 
 
 class TestVideoStatisticsMerge:
-    def test_merge_video_statistics_list(self, tmp_path: pathlib.Path) -> None:
+    def test_merge_video_statistics_list(self, tmp_path: Path) -> None:
         video_path1 = tmp_path / "test1.mp4"
         video_path2 = tmp_path / "test2.mp4"
 

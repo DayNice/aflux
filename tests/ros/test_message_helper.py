@@ -1,4 +1,4 @@
-import pathlib
+from pathlib import Path
 
 from rosbags.typesys.store import Typestore
 
@@ -6,7 +6,7 @@ from aflux.utils import ros as ros_utils
 
 
 class TestMessageHelper:
-    def test_read_message_schema_dir(self, tmp_path: pathlib.Path) -> None:
+    def test_read_message_schema_dir(self, tmp_path: Path) -> None:
         msg_dir = tmp_path / "my_msgs" / "msg"
         msg_dir.mkdir(parents=True)
         (msg_dir / "Custom.msg").write_text("float64 data\n", encoding="utf-8")

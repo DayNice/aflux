@@ -1,6 +1,6 @@
 import functools
-import pathlib
 from collections.abc import Iterator
+from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 
@@ -20,10 +20,10 @@ from ._message_node import (
 class BagReader:
     def __init__(
         self,
-        bag_parent_dir: str | pathlib.Path,
+        bag_parent_dir: str | Path,
         typestore: Typestore | None = None,
     ):
-        self._bag_parent_dir = pathlib.Path(bag_parent_dir)
+        self._bag_parent_dir = Path(bag_parent_dir)
         self._bag_dirs = sorted(el.parent for el in self._bag_parent_dir.rglob("metadata.yaml"))
         if typestore is None:
             typestore = get_typestore(Stores.LATEST)

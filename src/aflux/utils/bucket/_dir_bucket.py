@@ -1,9 +1,9 @@
 import datetime
-import pathlib
 import shutil
 import tempfile
 import weakref
 from collections.abc import Iterator
+from pathlib import Path
 from types import TracebackType
 from typing import Self, override
 
@@ -15,21 +15,21 @@ from aflux.types.bucket import BucketFileMeta
 class DirBucket(Bucket):
     def __init__(
         self,
-        root_dir: str | pathlib.Path,
+        root_dir: str | Path,
         *,
-        temp_dir: str | pathlib.Path | None = None,
+        temp_dir: str | Path | None = None,
     ):
-        self._root_dir = pathlib.Path(root_dir).resolve()
+        self._root_dir = Path(root_dir).resolve()
 
         if temp_dir is not None:
-            self._temp_dir = pathlib.Path(temp_dir).resolve()
+            self._temp_dir = Path(temp_dir).resolve()
             self._temp_dir_finalizer = None
         else:
-            self._temp_dir = pathlib.Path(tempfile.mkdtemp()).resolve()
+            self._temp_dir = Path(tempfile.mkdtemp()).resolve()
             self._temp_dir_finalizer = weakref.finalize(self, shutil.rmtree, self._temp_dir, ignore_errors=True)
 
-    def _get_temp_file(self, remote_path: str) -> pathlib.Path:
-        suffix = "".join(pathlib.Path(remote_path).suffixes)
+    def _get_temp_file(self, remote_path: str) -> Path:
+        suffix = "".join(Path(remote_path).suffixes)
         name = f"{utils.get_uuid_v7().hex}{suffix}"
         temp_file = (self._temp_dir / name).resolve()
 
@@ -38,14 +38,14 @@ class DirBucket(Bucket):
             raise ValueError(msg)
         return temp_file
 
-    def _get_remote_file(self, remote_path: str) -> pathlib.Path:
+    def _get_remote_file(self, remote_path: str) -> Path:
         remote_file = (self._root_dir / remote_path).resolve()
         if not remote_file.is_relative_to(self._root_dir):
             msg = f"Remote path escapes root directory: {remote_path!r}"
             raise ValueError(msg)
         return remote_file
 
-    def _validate_remote_file(self, remote_path: str) -> pathlib.Path:
+    def _validate_remote_file(self, remote_path: str) -> Path:
         remote_file = self._get_remote_file(remote_path)
         if not remote_file.is_file():
             msg = f"Remote file does not exist: {remote_path!r}"
@@ -90,7 +90,7 @@ class DirBucket(Bucket):
         yield from file_metas
 
     @override
-    def get_file(self, remote_path: str, *, refresh: bool = False) -> pathlib.Path:
+    def get_file(self, remote_path: str, *, refresh: bool = False) -> Path:
         remote_file = self._validate_remote_file(remote_path)
         temp_file = self._get_temp_file(remote_path)
         shutil.copy(remote_file, temp_file)
@@ -101,7 +101,7 @@ class DirBucket(Bucket):
         return self._validate_remote_file(remote_path).read_bytes()
 
     @override
-    def put_file(self, local_file: str | pathlib.Path, remote_path: str) -> None:
+    def put_file(self, local_file: str | Path, remote_path: str) -> None:
         remote_file = self._get_remote_file(remote_path)
         remote_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(local_file, remote_file)

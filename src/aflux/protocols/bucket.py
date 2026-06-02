@@ -1,6 +1,6 @@
-import pathlib
 from abc import abstractmethod
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from aflux.types.bucket import BucketFileMeta
@@ -18,13 +18,13 @@ class Bucket(Protocol):
     def get_file_metas(self, remote_prefix: str = "") -> Iterator[BucketFileMeta]: ...
 
     @abstractmethod
-    def get_file(self, remote_path: str) -> pathlib.Path: ...
+    def get_file(self, remote_path: str) -> Path: ...
 
     @abstractmethod
     def get_bytes(self, remote_path: str) -> bytes: ...
 
     @abstractmethod
-    def put_file(self, local_file: str | pathlib.Path, remote_path: str) -> None: ...
+    def put_file(self, local_file: str | Path, remote_path: str) -> None: ...
 
     @abstractmethod
     def put_bytes(self, local_bytes: bytes, remote_path: str) -> None: ...

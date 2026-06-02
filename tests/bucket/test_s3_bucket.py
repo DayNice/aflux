@@ -1,7 +1,7 @@
 import concurrent.futures
-import pathlib
 import threading
 import time
+from pathlib import Path
 from typing import cast
 
 import boto3
@@ -44,7 +44,7 @@ class TestS3Bucket:
         s3_client.put_object(Bucket="test-bucket", Key="data.txt", Body=b"v2")
         assert bucket.get_bytes(remote_path) == b"v2"
 
-    def test_context_manager_cleanup(self, s3_client, tmp_path: pathlib.Path) -> None:
+    def test_context_manager_cleanup(self, s3_client, tmp_path: Path) -> None:
         with S3Bucket("test-bucket", temp_dir=tmp_path, s3_client=s3_client) as bucket:
             remote_path = "temp.txt"
             bucket.put_bytes(b"data", remote_path)
