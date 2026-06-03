@@ -446,9 +446,12 @@ def get_video_stream_info(video_file: str | Path) -> VideoStreamInfo:
         return video_reader.get_stream_info()
 
 
-def get_video_frame_infos(video_file: str | Path) -> list[VideoFrameInfo]:
+def get_video_frame_infos(
+    video_file: str | Path,
+    frame_indices: Iterable[int] | None = None,
+) -> list[VideoFrameInfo]:
     with VideoReader(video_file) as video_reader:
-        return video_reader.get_frame_infos()
+        return video_reader.get_frame_infos(frame_indices)
 
 
 def get_video_keyframe_infos(video_file: str | Path) -> list[VideoFrameInfo]:
