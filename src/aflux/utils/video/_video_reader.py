@@ -260,7 +260,20 @@ class VideoReader:
         return [frame_info_map[el] for el in frame_indices]
 
     def get_frame_info(self, frame_index: int) -> VideoFrameInfo:
-        return self.get_frame_infos([frame_index])[0]
+        estimated_frame_pts = self._estimate_frame_pts_by_index(frame_index)
+
+        pts_tolerance = Fraction(1, 2) / self._frames_per_time_base
+        # assume at least 1 keyframe per 12 seconds
+        pts_guard = 12 * self._stream_info.fps / self._frames_per_time_base
+
+        assert self._seek_pts(estimated_frame_pts)
+        for frame_info in self._demux_frame_infos():
+            if frame_info.pts - estimated_frame_pts > pts_guard:
+                raise RuntimeError("Frame pts value was outside expected demuxing range.")
+            if abs(frame_info.pts - estimated_frame_pts) <= pts_tolerance:
+                return frame_info
+
+        raise RuntimeError("Frame was not within expected demuxing range")
 
     def get_keyframe_infos(self) -> list[VideoFrameInfo]:
         return self._keyframe_infos
@@ -327,7 +340,17 @@ class VideoReader:
             yield found_frame_map.pop(frame_index)
 
     def decode_frame(self, frame_index: int) -> av.VideoFrame:
-        return next(self.decode_frames((frame_index,)))
+        frame_info = self.get_frame_info(frame_index)
+
+        assert self._seek_pts(frame_info.pts)
+        for frame in self._decode_frames():
+            assert frame.pts is not None, "Frame should have a valid pts value."
+            if frame.pts > frame_info.pts:
+                raise RuntimeError("Frame pts value was outside expected decoding range.")
+            if frame.pts == frame_info.pts:
+                return frame
+
+        raise RuntimeError("Frame not found within expected decoding range.")
 
     def compute_statistics(self) -> VideoStatistics:
         # The upper bound of sample size is 385.
