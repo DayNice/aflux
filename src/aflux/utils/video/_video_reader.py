@@ -1,6 +1,5 @@
 import bisect
 import functools
-import math
 import operator
 from collections.abc import Iterable, Iterator
 from fractions import Fraction
@@ -171,7 +170,7 @@ class VideoReader:
 
         # we assume the first frame is a keyframe
         first_frame_pts = self._first_keyframe_pts
-        return first_frame_pts + math.ceil(frame_index / self._frames_per_time_base)
+        return first_frame_pts + round(frame_index / self._frames_per_time_base)
 
     def _estimate_frame_index_by_pts(self, pts: int) -> int:
         if pts < 0:
