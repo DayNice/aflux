@@ -191,6 +191,55 @@ class VideoReader:
 
         return frame_index
 
+    def _build_keyframe_map(
+        self,
+        frame_indices: Iterable[int],
+    ) -> dict[VideoFrameInfo, list[VideoFrameInfo]]:
+        frame_indices = sorted(frame_indices)
+        if len(frame_indices) != len(set(frame_indices)):
+            msg = "Frame indices should be unique."
+            raise ValueError(msg)
+
+        if len(frame_indices) == 0:
+            return {}
+
+        keyframe_frame_indices_map: dict[VideoFrameInfo, list[int]] = {}
+        for frame_index in frame_indices:
+            target_frame_pts = self._estimate_frame_pts_by_index(frame_index)
+            keyframe_info = self._search_keyframe_info_by_pts(target_frame_pts)
+            if keyframe_info not in keyframe_frame_indices_map:
+                keyframe_frame_indices_map[keyframe_info] = []
+            keyframe_frame_indices_map[keyframe_info].append(frame_index)
+
+        # assume at least 1 keyframe per 12 seconds
+        pts_guard = 12 * self._stream_info.fps / self._frames_per_time_base
+
+        keyframe_map: dict[VideoFrameInfo, list[VideoFrameInfo]] = {}
+        for keyframe_info, keyframe_frame_indices in keyframe_frame_indices_map.items():
+            keyframe_frame_infos: list[VideoFrameInfo] = []
+            target_frame_index_set = set(keyframe_frame_indices)
+
+            assert self._seek_pts(keyframe_info.pts)
+            for frame_info in self._demux_frame_infos():
+                if abs(frame_info.pts - keyframe_info.pts) > pts_guard:
+                    raise RuntimeError("Frame pts value was outside expected demuxing range.")
+                if frame_info.frame_index not in target_frame_index_set:
+                    continue
+
+                keyframe_frame_infos.append(frame_info)
+                target_frame_index_set.remove(frame_info.frame_index)
+
+                if len(target_frame_index_set) == 0:
+                    break
+
+            if len(target_frame_index_set) > 0:
+                msg = f"Frames were not within expected demuxing range: {target_frame_index_set}"
+                raise RuntimeError(msg)
+            keyframe_frame_infos.sort(key=operator.attrgetter("frame_index"))
+            keyframe_map[keyframe_info] = keyframe_frame_infos
+
+        return keyframe_map
+
     def get_stream_info(self) -> VideoStreamInfo:
         return self._stream_info
 
