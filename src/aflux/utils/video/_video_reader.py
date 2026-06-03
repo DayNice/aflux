@@ -265,21 +265,23 @@ class VideoReader:
     def get_keyframe_infos(self) -> list[VideoFrameInfo]:
         return self._keyframe_infos
 
-    def get_first_keyframe_info(self) -> VideoFrameInfo:
-        assert self._seek_pts(0, backward=False)
-        frame_info = next(self._demux_frame_infos())
+    def get_prev_keyframe_info(self, frame_index: int) -> VideoFrameInfo:
+        frame_pts = self._estimate_frame_pts_by_index(frame_index)
+        assert self._seek_pts(frame_pts), "The first frame of a video should be a keyframe."
+        keyframe_info = next(self._demux_frame_infos())
 
-        assert isinstance(frame_info, VideoFrameInfo)
-        assert frame_info.is_keyframe, "Packet should belong to a keyframe."
-        return frame_info
+        assert keyframe_info.is_keyframe, "Packet should belong to a keyframe."
+        return keyframe_info
 
-    def get_last_keyframe_info(self) -> VideoFrameInfo:
-        assert self._seek_pts(self._last_keyframe_pts, backward=False)
-        frame_info = next(self._demux_frame_infos())
+    def get_next_keyframe_info(self, frame_index: int) -> VideoFrameInfo | None:
+        frame_pts = self._estimate_frame_pts_by_index(frame_index)
+        if not self._seek_pts(frame_pts, backward=False):
+            return None
+        keyframe_info = next(self._demux_frame_infos())
 
-        assert isinstance(frame_info, VideoFrameInfo)
-        assert frame_info.is_keyframe, "Packet should belong to a keyframe."
-        return frame_info
+        assert isinstance(keyframe_info, VideoFrameInfo)
+        assert keyframe_info.is_keyframe, "Packet should belong to a keyframe."
+        return keyframe_info
 
     def decode_frames(self, frame_indices: Iterable[int] | None = None) -> Iterator[av.VideoFrame]:
         if frame_indices is None:
