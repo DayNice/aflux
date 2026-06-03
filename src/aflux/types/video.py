@@ -19,6 +19,7 @@ class VideoStreamInfo(BaseModel):
 class VideoFrameInfo(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    frame_index: int
     timestamp: Fraction
     dts: int
     pts: NonNegativeInt

@@ -32,7 +32,9 @@ class VideoReader:
         self._stream = self._container.streams.video[0]
         self._stream.thread_type = "AUTO"
 
-        # preload stream info to prevent implicit seek while demuxing or decoding
+        # preload attributes to prevent implicit seek while demuxing or decoding
+        self._first_keyframe_pts
+        self._last_keyframe_pts
         self._stream_info
 
     def _seek_pts(self, pts: int, *, backward: bool = True) -> bool:
@@ -124,7 +126,9 @@ class VideoReader:
         for packet in self._demux_packets():
             if packet.pts is None:
                 continue
+            frame_index = self._estimate_frame_index_by_pts(packet.pts)
             frame_info = VideoFrameInfo(
+                frame_index=frame_index,
                 timestamp=packet.pts * self._stream_info.time_base,
                 dts=packet.dts if packet.dts is not None else packet.pts,
                 pts=packet.pts,
@@ -168,6 +172,24 @@ class VideoReader:
         # we assume the first frame is a keyframe
         first_frame_pts = self._first_keyframe_pts
         return first_frame_pts + math.ceil(frame_index / self._frames_per_time_base)
+
+    def _estimate_frame_index_by_pts(self, pts: int) -> int:
+        if pts < 0:
+            msg = "Target pts should be a non-negative integer."
+            raise ValueError(msg)
+
+        # we assume the first frame is a keyframe
+        first_frame_pts = self._first_keyframe_pts
+        frame_index = round((pts - first_frame_pts) * self._frames_per_time_base)
+
+        if frame_index < 0:
+            msg = f"Estimated frame index was negative: {frame_index}"
+            raise ValueError(msg)
+        if frame_index >= self._stream_info.num_frames:
+            msg = f"Estimated frame index was greater than or equal to size: {frame_index}"
+            raise ValueError(msg)
+
+        return frame_index
 
     def get_stream_info(self) -> VideoStreamInfo:
         return self._stream_info
