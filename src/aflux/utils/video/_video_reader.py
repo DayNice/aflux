@@ -292,28 +292,11 @@ class VideoReader:
         if len(frame_indices) == 0:
             return
 
-        if len(frame_indices) != len(set(frame_indices)):
-            msg = "Frame indices should be unique."
-            raise ValueError(msg)
-
-        sorted_frame_indices = sorted(frame_indices)
-        if sorted_frame_indices[0] < 0:
-            msg = f"Frame index should be non-negative: {sorted_frame_indices[0]}"
-            raise ValueError(msg)
-        if sorted_frame_indices[-1] >= self._stream_info.num_frames:
-            msg = f"Frame index should be less than size: {sorted_frame_indices[-1]}"
-            raise ValueError(msg)
-
-        keyframe_map: dict[VideoFrameInfo, list[VideoFrameInfo]] = {}
+        keyframe_map = self._build_keyframe_map(frame_indices)
         keyframe_reverse_map: dict[int, VideoFrameInfo] = {}
-        for frame_index in sorted_frame_indices:
-            frame_info = self.get_frame_info(frame_index)
-            keyframe_info = self._search_keyframe_info_by_pts(frame_info.pts)
-
-            if keyframe_info not in keyframe_map:
-                keyframe_map[keyframe_info] = []
-            keyframe_map[keyframe_info].append(frame_info)
-            keyframe_reverse_map[frame_index] = keyframe_info
+        for keyframe_info, frame_infos in keyframe_map.items():
+            for frame_info in frame_infos:
+                keyframe_reverse_map[frame_info.frame_index] = keyframe_info
 
         found_frame_map: dict[int, av.VideoFrame] = {}
         for frame_index in frame_indices:
