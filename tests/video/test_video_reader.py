@@ -32,24 +32,45 @@ class TestVideoReader:
 
     def test_decode_frames(self, tmp_video: Path) -> None:
         with VideoReader(tmp_video) as reader:
-            frames = list(reader.decode_frames([0, 5, 9]))
+            frames = list(reader.decode_frames([9, 0, 5]))
 
         assert len(frames) == 3
 
-        arr_0 = frames[0].to_ndarray(format="rgb24")
-        arr_5 = frames[1].to_ndarray(format="rgb24")
-        arr_9 = frames[2].to_ndarray(format="rgb24")
+        arr_9 = frames[0].to_ndarray(format="rgb24")
+        arr_0 = frames[1].to_ndarray(format="rgb24")
+        arr_5 = frames[2].to_ndarray(format="rgb24")
 
-        # Check red component
+        # Frame 9 is blue
+        assert np.mean(arr_9[:, :, 0]) < 50
+        assert np.mean(arr_9[:, :, 2]) > 200
+
+        # Frame 0 is red
         assert np.mean(arr_0[:, :, 0]) > 200
         assert np.mean(arr_0[:, :, 2]) < 50
 
-        # Check blue component
+        # Frame 5 is blue
         assert np.mean(arr_5[:, :, 0]) < 50
         assert np.mean(arr_5[:, :, 2]) > 200
 
-        assert np.mean(arr_9[:, :, 0]) < 50
-        assert np.mean(arr_9[:, :, 2]) > 200
+    def test_get_frame_infos_with_indices(self, tmp_video: Path) -> None:
+        with VideoReader(tmp_video) as reader:
+            infos = reader.get_frame_infos([8, 2, 4])
+
+        assert len(infos) == 3
+        assert infos[0].frame_index == 8
+        assert infos[1].frame_index == 2
+        assert infos[2].frame_index == 4
+
+    def test_invalid_frame_indices(self, tmp_video: Path) -> None:
+        with VideoReader(tmp_video) as reader:
+            with pytest.raises(ValueError, match="should be unique"):
+                reader.get_frame_infos([0, 0, 1])
+
+            with pytest.raises(ValueError, match="should be non-negative"):
+                reader.get_frame_infos([-1, 0])
+
+            with pytest.raises(ValueError, match="should be less than size"):
+                reader.get_frame_infos([0, 9999])
 
     def test_compute_statistics(self, tmp_video: Path) -> None:
         with VideoReader(tmp_video) as reader:
