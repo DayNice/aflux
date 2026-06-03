@@ -243,31 +243,25 @@ class VideoReader:
     def get_stream_info(self) -> VideoStreamInfo:
         return self._stream_info
 
-    def get_frame_infos(self) -> list[VideoFrameInfo]:
-        assert self._seek_pts(0)
-        frame_infos = [el for el in self._demux_frame_infos()]
-        frame_infos.sort(key=lambda el: el.timestamp)
-        return frame_infos
+    def get_frame_infos(self, frame_indices: Iterable[int] | None = None) -> list[VideoFrameInfo]:
+        if frame_indices is None:
+            assert self._seek_pts(0)
+            frame_infos = list(self._demux_frame_infos())
+            frame_infos.sort(key=operator.attrgetter("frame_index"))
+            return frame_infos
+
+        frame_indices = list(frame_indices)
+        keyframe_map = self._build_keyframe_map(frame_indices)
+
+        frame_info_map: dict[int, VideoFrameInfo] = {}
+        for frame_infos in keyframe_map.values():
+            for frame_info in frame_infos:
+                frame_info_map[frame_info.frame_index] = frame_info
+
+        return [frame_info_map[el] for el in frame_indices]
 
     def get_frame_info(self, frame_index: int) -> VideoFrameInfo:
-        estimated_frame_pts = self._estimate_frame_pts_by_index(frame_index)
-
-        pts_duration_per_frame = 1 / self._frames_per_time_base
-        pts_tolerance = Fraction(1, 2) * pts_duration_per_frame
-        # assume at least 1 keyframe per 720 frames
-        pts_guard = 720 * pts_duration_per_frame
-
-        found_frame_info: VideoFrameInfo | None = None
-        assert self._seek_pts(estimated_frame_pts)
-        for frame_info in self._demux_frame_infos():
-            pts_diff = abs(frame_info.pts - estimated_frame_pts)
-            if pts_diff <= pts_tolerance:
-                found_frame_info = frame_info
-                break
-            assert pts_diff <= pts_guard, "Frame should be within demuxing range."
-
-        assert found_frame_info is not None, "Frame should be within tolerance."
-        return found_frame_info
+        return self.get_frame_infos([frame_index])[0]
 
     def get_keyframe_infos(self) -> list[VideoFrameInfo]:
         return self._keyframe_infos
