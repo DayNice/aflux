@@ -32,19 +32,19 @@ def merge_video_statistics_list(video_statistics_list: Iterable[VideoStatistics]
     for i in range(len(first_video_statistics.min)):
         min_scalar = min(el.min[i] for el in video_statistics_list)
         total_min.append(min_scalar)
-    total_min = tuple(total_min)
+    total_min = cast(tuple[float, float, float], tuple(total_min))
 
     total_max = []
     for i in range(len(first_video_statistics.max)):
         max_scalar = max(el.max[i] for el in video_statistics_list)
         total_max.append(max_scalar)
-    total_max = tuple(total_max)
+    total_max = cast(tuple[float, float, float], tuple(total_max))
 
     total_mean = []
     for i in range(len(first_video_statistics.mean)):
         mean_scalar = sum(el.sample_size * el.mean[i] for el in video_statistics_list) / total_sample_size
         total_mean.append(mean_scalar)
-    total_mean = tuple(total_mean)
+    total_mean = cast(tuple[float, float, float], tuple(total_mean))
 
     total_std = []
     for i in range(len(first_video_statistics.std)):
@@ -57,7 +57,7 @@ def merge_video_statistics_list(video_statistics_list: Iterable[VideoStatistics]
         var_scalar = (square_scalar - total_mean[i] ** 2) * (total_sample_size / (total_sample_size - 1))
         std_scalar = math.sqrt(max(0, var_scalar))
         total_std.append(std_scalar)
-    total_std = tuple(total_std)
+    total_std = cast(tuple[float, float, float], tuple(total_std))
 
     return VideoStatistics(
         sample_size=total_sample_size,
