@@ -6,7 +6,7 @@ from collections.abc import Iterable, Iterator
 from fractions import Fraction
 from pathlib import Path
 from types import TracebackType
-from typing import Self, TypedDict, cast
+from typing import Self, cast
 
 import av
 import av.container
@@ -261,20 +261,15 @@ class VideoReader:
             msg = f"Frame index should be less than size: {sorted_frame_indices[-1]}"
             raise ValueError(msg)
 
-        class _FrameData(TypedDict):
-            frame_index: int
-            frame_info: VideoFrameInfo
-
-        keyframe_map: dict[VideoFrameInfo, list[_FrameData]] = {}
+        keyframe_map: dict[VideoFrameInfo, list[VideoFrameInfo]] = {}
         keyframe_reverse_map: dict[int, VideoFrameInfo] = {}
         for frame_index in sorted_frame_indices:
             frame_info = self.get_frame_info(frame_index)
-            frame_data: _FrameData = {"frame_index": frame_index, "frame_info": frame_info}
             keyframe_info = self._search_keyframe_info_by_pts(frame_info.pts)
 
             if keyframe_info not in keyframe_map:
                 keyframe_map[keyframe_info] = []
-            keyframe_map[keyframe_info].append(frame_data)
+            keyframe_map[keyframe_info].append(frame_info)
             keyframe_reverse_map[frame_index] = keyframe_info
 
         found_frame_map: dict[int, av.VideoFrame] = {}
@@ -284,10 +279,10 @@ class VideoReader:
                 continue
 
             keyframe_info = keyframe_reverse_map[frame_index]
-            frame_data_list = keyframe_map[keyframe_info]
+            frame_infos = keyframe_map[keyframe_info]
 
-            frame_pts_map = {el["frame_info"].pts: el["frame_index"] for el in frame_data_list}
-            assert len(frame_pts_map) == len(frame_data_list), "All pts values within video should be unique."
+            frame_pts_map = {el.pts: el.frame_index for el in frame_infos}
+            assert len(frame_pts_map) == len(frame_infos), "All pts values within video should be unique."
             max_frame_pts = max(frame_pts_map.keys())
 
             assert self._seek_pts(keyframe_info.pts)
