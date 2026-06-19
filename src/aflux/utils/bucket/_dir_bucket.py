@@ -128,6 +128,11 @@ class DirBucket(Bucket):
             parent_dir.rmdir()
             parent_dir = parent_dir.parent
 
+    @override
+    def with_prefix(self, remote_prefix: str) -> "DirBucket":
+        child_temp_dir = tempfile.mkdtemp(dir=self._temp_dir)
+        return DirBucket(self._root_dir / remote_prefix, temp_dir=child_temp_dir)
+
     def clear_temp_dir(self) -> None:
         if not self._temp_dir.exists():
             return

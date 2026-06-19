@@ -136,6 +136,17 @@ class S3Bucket(Bucket):
         bucket_key = self._get_bucket_path(remote_path)
         self._s3_client.delete_object(Bucket=self._bucket_name, Key=bucket_key)
 
+    @override
+    def with_prefix(self, remote_prefix: str) -> "S3Bucket":
+        child_temp_dir = tempfile.mkdtemp(dir=self._temp_dir)
+        child_bucket = S3Bucket(
+            self._bucket_name,
+            self._get_bucket_path(remote_prefix),
+            temp_dir=child_temp_dir,
+            s3_client=self._s3_client,
+        )
+        return child_bucket
+
     def clear_temp_dir(self) -> None:
         if not self._temp_dir.exists():
             return

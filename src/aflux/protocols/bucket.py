@@ -31,3 +31,6 @@ class Bucket(Protocol):
 
     @abstractmethod
     def delete_file(self, remote_path: str) -> None: ...
+
+    @abstractmethod
+    def with_prefix(self, remote_prefix: str) -> "Bucket": ...
