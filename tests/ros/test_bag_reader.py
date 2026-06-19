@@ -9,8 +9,8 @@ from aflux.utils.ros import BagReader
 
 
 @pytest.fixture
-def tmp_rosbag(tmp_path: Path) -> Path:
-    bag_path = tmp_path / "test_bag"
+def tmp_rosbag(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    bag_path = tmp_path_factory.mktemp("rosbag") / "test_bag"
 
     typestore = get_typestore(Stores.LATEST)
 
