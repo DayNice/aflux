@@ -1,8 +1,5 @@
 import io
-import shutil
-import tempfile
 import threading
-import weakref
 from collections.abc import Iterator
 from concurrent.futures import Future
 from pathlib import Path
@@ -12,9 +9,10 @@ from typing import TYPE_CHECKING, Self, override
 import boto3
 import botocore.exceptions
 
-from aflux import utils
 from aflux.protocols.bucket import Bucket
 from aflux.types.bucket import BucketFileMeta
+
+from ._file_allocator import FileAllocator
 
 if TYPE_CHECKING:
     from types_boto3_s3 import S3Client
@@ -28,18 +26,12 @@ class S3Bucket(Bucket):
         bucket_name: str,
         bucket_prefix: str = "",
         *,
-        temp_dir: str | Path | None = None,
+        temp_dir: str | Path | FileAllocator | None = None,
         s3_client: S3Client | None = None,
     ):
         self._bucket_name = bucket_name
         self._bucket_prefix = bucket_prefix
-
-        if temp_dir is not None:
-            self._temp_dir = Path(temp_dir).resolve()
-            self._temp_dir_finalizer = None
-        else:
-            self._temp_dir = Path(tempfile.mkdtemp()).resolve()
-            self._temp_dir_finalizer = weakref.finalize(self, shutil.rmtree, self._temp_dir, ignore_errors=True)
+        self._allocator = temp_dir if isinstance(temp_dir, FileAllocator) else FileAllocator(temp_dir)
 
         if s3_client is None:
             s3_client = boto3.client("s3")
@@ -47,16 +39,6 @@ class S3Bucket(Bucket):
 
         self._registry_lock = threading.Lock()
         self._active_download_map: dict[str, Future[Path]] = {}
-
-    def _get_temp_file(self, remote_path: str) -> Path:
-        suffix = "".join(Path(remote_path).suffixes)
-        name = f"{utils.get_uuid_v7().hex}{suffix}"
-        temp_file = (self._temp_dir / name).resolve()
-
-        if not temp_file.is_relative_to(self._temp_dir):
-            msg = f"Remote path escapes temp directory: {remote_path!r}"
-            raise ValueError(msg)
-        return temp_file
 
     def _get_bucket_path(self, remote_path: str) -> str:
         return f"{self._bucket_prefix}{remote_path}"
@@ -95,7 +77,7 @@ class S3Bucket(Bucket):
 
     @override
     def get_file(self, remote_path: str) -> Path:
-        temp_file = self._get_temp_file(remote_path)
+        temp_file = self._allocator.allocate(remote_path)
         with self._registry_lock:
             future = Future()
             self._active_download_map[temp_file.name] = future
@@ -138,23 +120,15 @@ class S3Bucket(Bucket):
 
     @override
     def with_prefix(self, remote_prefix: str) -> "S3Bucket":
-        child_temp_dir = tempfile.mkdtemp(dir=self._temp_dir)
-        child_bucket = S3Bucket(
+        return S3Bucket(
             self._bucket_name,
             self._get_bucket_path(remote_prefix),
-            temp_dir=child_temp_dir,
+            temp_dir=self._allocator.make_child(),
             s3_client=self._s3_client,
         )
-        return child_bucket
 
     def clear_temp_dir(self) -> None:
-        if not self._temp_dir.exists():
-            return
-        for path in self._temp_dir.iterdir():
-            if path.is_file():
-                path.unlink()
-                continue
-            shutil.rmtree(path, ignore_errors=True)
+        self._allocator.clear()
 
     def __enter__(self) -> Self:
         return self
@@ -165,4 +139,4 @@ class S3Bucket(Bucket):
         exc: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        self.clear_temp_dir()
+        self._allocator.clear()
