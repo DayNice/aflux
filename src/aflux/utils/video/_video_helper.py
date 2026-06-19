@@ -201,8 +201,10 @@ def mux_copy_video_segment(
         av.open(output_file, "w", format="mp4", options={"movflags": "faststart"}) as output_container,
     ):
         stream_info = input_reader.get_stream_info()
-        from_frame_info = input_reader.get_frame_info(from_frame_index)
-        to_frame_info = input_reader.get_frame_info(to_frame_index)
+        from_frame_pts = input_reader.get_frame_info(from_frame_index).pts
+        to_frame_pts = None
+        if to_frame_index < stream_info.num_frames:
+            to_frame_pts = input_reader.get_frame_info(to_frame_index).pts
 
         # TODO: use public attributes instead of private ones
         output_stream = output_container.add_stream_from_template(
@@ -216,19 +218,19 @@ def mux_copy_video_segment(
         )
 
         # TODO: use public methods instead of private ones
-        input_reader._seek_pts(from_frame_info.pts)
+        input_reader._seek_pts(from_frame_pts)
         for packet in input_reader._demux_packets():
             # ignore 'flush packet'
             if packet.size == 0 and packet.dts is None and packet.pts is None:
                 continue
 
             assert packet.pts is not None, "Packet should have a valid pts."
-            if packet.pts < from_frame_info.pts:
+            if packet.pts < from_frame_pts:
                 continue
-            if packet.pts >= to_frame_info.pts:
+            if to_frame_pts is not None and packet.pts >= to_frame_pts:
                 break
 
-            packet.pts -= from_frame_info.pts
+            packet.pts -= from_frame_pts
             packet.dts = None  # re-generate dts value
             packet.stream = output_stream
             output_container.mux(packet)
