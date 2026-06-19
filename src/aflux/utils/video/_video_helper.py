@@ -426,3 +426,51 @@ def encode_concat_videos(
 
         for packet in stream.encode():
             container.mux(packet)
+
+
+def smart_copy_video_segment(
+    input_file: str | Path,
+    output_file: str | Path,
+    from_frame_index: int,
+    to_frame_index: int,
+) -> None:
+    """Copy a video segment by muxing whole GOPs and re-encoding only the partial GOPs at the ends.
+
+    Assumes a frame depends on at most its nearest keyframe on each side, so a closed keyframe interval is safe to mux.
+    """
+    with VideoReader(input_file) as reader:
+        start_keyframe_info = reader.get_next_keyframe_info(from_frame_index)
+        end_keyframe_info = reader.get_prev_keyframe_info(to_frame_index - 1)
+
+        # no complete keyframe interval inside the cut
+        if start_keyframe_info is None or start_keyframe_info.frame_index > end_keyframe_info.frame_index:
+            encode_copy_video_segment(input_file, output_file, from_frame_index, to_frame_index)
+            return
+
+        body_from_index = start_keyframe_info.frame_index
+        body_to_index = end_keyframe_info.frame_index + 1  # exclusive bound of the closed interval
+
+        # both ends already keyframe-aligned
+        if from_frame_index == body_from_index and to_frame_index == body_to_index:
+            mux_copy_video_segment(input_file, output_file, from_frame_index, to_frame_index)
+            return
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            segment_files: list[Path] = []
+
+            if from_frame_index < body_from_index:
+                head_file = tmp_dir / "head.mp4"
+                encode_copy_video_segment(input_file, head_file, from_frame_index, body_from_index)
+                segment_files.append(head_file)
+
+            body_file = tmp_dir / "body.mp4"
+            mux_copy_video_segment(input_file, body_file, body_from_index, body_to_index)
+            segment_files.append(body_file)
+
+            if body_to_index < to_frame_index:
+                tail_file = tmp_dir / "tail.mp4"
+                encode_copy_video_segment(input_file, tail_file, body_to_index, to_frame_index)
+                segment_files.append(tail_file)
+
+            mux_concat_videos(segment_files, output_file)

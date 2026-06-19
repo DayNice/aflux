@@ -7,6 +7,7 @@ from ._video_helper import (
     mux_concat_videos,
     mux_copy_video_segment,
     remux_video_into_mp4,
+    smart_copy_video_segment,
 )
 from ._video_reader import (
     VideoReader,
@@ -32,4 +33,5 @@ __all__ = [
     "mux_concat_videos",
     "mux_copy_video_segment",
     "remux_video_into_mp4",
+    "smart_copy_video_segment",
 ]
