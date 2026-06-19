@@ -147,6 +147,12 @@ def encode_images_into_mp4(
     fps: int | Fraction = 30,
     max_bits_per_pixel: float | Fraction | None = None,
 ):
+    """Encode images into av1 mp4 videos
+
+    Note that libsvtav1 logs can only be disabled by setting the environment variable `SVT_LOG=0`
+    from outside the Python process since `os.environ` has no control over the process spawned by PyAV.
+    """
+
     output_file = Path(output_file)
 
     images = iter(images)
