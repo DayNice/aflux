@@ -50,3 +50,24 @@ class TestDirBucket:
         assert not (tmp_path / "nested" / "dir").exists()
         assert (tmp_path / "nested").exists()
         assert bucket.check_file_exists(path2)
+
+    def test_context_manager_cleanup(self, tmp_path: Path) -> None:
+        root_dir = tmp_path / "root"
+        temp_dir = tmp_path / "temp"
+        root_dir.mkdir()
+        temp_dir.mkdir()
+
+        with DirBucket(root_dir, temp_dir=temp_dir) as bucket:
+            bucket.put_bytes(b"data", "file.txt")
+            local_file = bucket.get_file("file.txt")
+            assert local_file.exists()
+
+        assert temp_dir.exists()
+        assert not any(temp_dir.iterdir())
+
+    def test_with_prefix(self, tmp_path: Path) -> None:
+        bucket = DirBucket(tmp_path)
+        child = bucket.with_prefix("sub")
+        child.put_bytes(b"data", "file.txt")
+        assert child.check_file_exists("file.txt")
+        assert bucket.check_file_exists("sub/file.txt")

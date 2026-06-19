@@ -34,7 +34,7 @@ class TestS3Bucket:
         bucket = S3Bucket("test-bucket", s3_client=s3_client)
         assert not bucket.check_file_exists("missing.txt")
 
-    def test_refresh_logic(self, s3_client) -> None:
+    def test_get_bytes_returns_current_content(self, s3_client) -> None:
         bucket = S3Bucket("test-bucket", s3_client=s3_client)
         remote_path = "data.txt"
 
@@ -81,6 +81,13 @@ class TestS3Bucket:
             for future in futures:
                 assert future.result().read_bytes() == local_bytes
         assert cast(mocker.MagicMock, s3_client.download_file).call_count == 5
+
+    def test_with_prefix(self, s3_client) -> None:
+        bucket = S3Bucket("test-bucket", "prefix/", s3_client=s3_client)
+        child = bucket.with_prefix("sub/")
+        child.put_bytes(b"data", "file.txt")
+        assert child.check_file_exists("file.txt")
+        assert bucket.check_file_exists("sub/file.txt")
 
     def test_concurrent_downloads_exception(self, s3_client, mocker: MockerFixture) -> None:
         download_started = threading.Event()
