@@ -312,11 +312,16 @@ def mux_concat_videos(
     with contextlib.ExitStack() as stack:
         ffconcat_file = stack.enter_context(tempfile.NamedTemporaryFile(delete_on_close=False))
         ffconcat_file = Path(ffconcat_file.name)
-        ffconcat_file.write_text("".join(f"file {el.absolute()}\n" for el in input_files))
+        ffconcat_file.write_text("".join(f"file {el.absolute().as_posix()}\n" for el in input_files))
 
-        input_container = stack.enter_context(
-            av.open(ffconcat_file, format="concat", options={"safe": "0"}),
-        )
+        try:
+            input_container = stack.enter_context(
+                av.open(ffconcat_file, format="concat", options={"safe": "0"}),
+            )
+        except av.error.FileNotFoundError as e:
+            # NOTE: error is misleading in that it broadly handles cases where the ffconcat content is incorrect
+            # (e.g. invalid format, input files not found, incompatible files, etc)
+            raise ValueError("Failed to open input files using ffconcat.") from e
         output_container = stack.enter_context(
             av.open(output_file, "w", format="mp4", options={"movflags": "faststart"}),
         )
