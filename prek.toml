@@ -14,8 +14,15 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.1"
+rev = "v0.15.21"
 hooks = [
     { id = "ruff-check", args = ["--fix"] },
     { id = "ruff-format" },
+]
+
+[[repos]]
+repo = "https://github.com/astral-sh/ty-pre-commit"
+rev = "v0.0.59"
+hooks = [
+  { id = "ty" },
 ]
